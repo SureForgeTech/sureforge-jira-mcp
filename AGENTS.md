@@ -1,4 +1,4 @@
-# Agent instructions: repo
+# Agent instructions: sureforge-jira-mcp
 
 <!-- fleet-core:begin (generated: edit the fleet source, not this block) -->
 ## Fleet core
