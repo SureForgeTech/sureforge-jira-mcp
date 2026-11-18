@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { healthcheck, main } from "./index.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./version.js";
 
@@ -66,4 +71,29 @@ test("the healthcheck object names the package and the node version", () => {
   assert.equal(status.name, PACKAGE_NAME);
   assert.equal(status.version, PACKAGE_VERSION);
   assert.match(status.node, /^v\d+\./);
+});
+
+test("the built entry point starts with a node shebang", () => {
+  const built = readFileSync(
+    fileURLToPath(new URL("./index.js", import.meta.url)),
+    "utf8",
+  );
+  assert.equal(built.split("\n", 1)[0], "#!/usr/bin/env node");
+});
+
+test("the command runs through a symlink, the way npm installs a bin entry", () => {
+  const built = fileURLToPath(new URL("./index.js", import.meta.url));
+  const directory = mkdtempSync(join(tmpdir(), "sureforge-jira-mcp-"));
+  const link = join(directory, "sureforge-jira-mcp");
+  symlinkSync(built, link);
+
+  try {
+    const result = spawnSync(process.execPath, [link, "--version"], {
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, `${PACKAGE_NAME} ${PACKAGE_VERSION}\n`);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
