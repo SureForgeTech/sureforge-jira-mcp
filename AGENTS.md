@@ -59,4 +59,10 @@ Applies to new work after a repository adopts this baseline; do not retroactivel
 
 ## Repository-specific
 
-Validation: name the command here once the project has one. Changelog: name the rule here.
+- What it is: an MCP server for Jira health (TypeScript on Node 20 or newer, Apache-2.0). It finds orphaned issues, missing release versions, stale blockers and broken hierarchies. It reports on a Jira project; it does not write to one.
+- Layout: source and tests in `src/` (a test sits beside the file it covers as `*.test.ts`), `package.json` is the manifest, `tsconfig.json` compiles `src/` to `dist/`, `tsconfig.build.json` is the same build without the test files, `dist/` and `node_modules/` are build output and are never committed.
+- Validation: from the repository root run `npm ci`, then `npm run check` (type check, build and the test suite, run with the Node test runner). `npm run check` is the declared validation for every change request: run it before committing and report its exit status. There is no CI workflow for the build yet, because the sandbox token has no Workflows permission; workflow files are added outside the sandbox.
+- Merge: the fleet core's merge rule applies: one substantive independent fresh-context review of the exact head with no unresolved P0 or P1 findings, resolved blocking threads and green current required checks. `main` accepts changes only through pull requests, and pull requests are merged with squash.
+- Changelog: `CHANGELOG.md` starts with `## Unreleased`, then one section per prepared version, newest first. A change that changes no documented behaviour adds no entry. The version has one source: the `version` field in `package.json` (currently `0.1.0`); `src/version.ts` carries the same value and `src/version.test.ts` fails when the two drift apart.
+- Credentials: no tracked file holds live-account data and no real Jira base URL, account or token may enter the tree, a fixture, a commit message or a pull-request body. Use only invented, `example`-style values. Check what the environment holds with `env | cut -d= -f1 | grep JIRA`, never by printing a value.
+
