@@ -183,7 +183,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     async (args) => {
       const projectKey = projectOf(args);
       const { issues, complete } = await load(projectKey);
-      const findings = findOrphanedIssues(issues);
+      const findings = findOrphanedIssues(issues, { complete });
       return {
         projectKey,
         count: findings.length,
@@ -318,7 +318,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
       const projectKey = projectOf(args);
       const { issues, versions, complete } = await load(projectKey);
       const findings = [
-        ...findOrphanedIssues(issues),
+        ...findOrphanedIssues(issues, { complete }),
         ...findMissingReleaseVersions(issues, versions),
         ...findStaleBlockers(issues, versions, {
           staleDays: args.staleDays ?? options.staleDays,

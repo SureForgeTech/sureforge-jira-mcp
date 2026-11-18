@@ -128,6 +128,23 @@ test("a parent that is not part of the listing is not reported", () => {
   assert.deepEqual(findings, []);
 });
 
+test("an orphan in an incomplete listing is reported as low severity", () => {
+  const findings = findOrphanedIssues([makeIssue({ key: "EX-1" })], {
+    complete: false,
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, "low");
+  assert.match(findings[0].detail, /no issue in the listing of 1 issues/);
+});
+
+test("an orphan in a complete listing is reported as medium severity", () => {
+  const findings = findOrphanedIssues([makeIssue({ key: "EX-1" })], {
+    complete: true,
+  });
+  assert.equal(findings[0].severity, "medium");
+  assert.match(findings[0].detail, /no issue points at it/);
+});
+
 test("a stale blocker of open work is reported", () => {
   const findings = findStaleBlockers(
     [

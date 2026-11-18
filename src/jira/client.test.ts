@@ -247,6 +247,45 @@ test("a listing that stops at the page cap is marked as truncated", async () => 
   assert.equal(listing.issues.length, 50);
 });
 
+test("the offset path reports a listing that stops short of the project as truncated", async () => {
+  // The cursor endpoint is unknown, the site answers with a total of 500.
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ issues: pageOfIssues(100), total: 500 }),
+    jsonResponse({ issues: pageOfIssues(50, 100), total: 500 }),
+  ]);
+
+  const listing = await client(fetchImpl, 150).listIssues("EX");
+  assert.equal(listing.issues.length, 150);
+  assert.equal(
+    listing.truncated,
+    true,
+    "the project holds 500 issues and only 150 were read",
+  );
+});
+
+test("the offset path stops when the total is read", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ issues: pageOfIssues(100), total: 150 }),
+    jsonResponse({ issues: pageOfIssues(50, 100), total: 150 }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(listing.issues.length, 150);
+  assert.equal(listing.truncated, false);
+});
+
+test("a cursor page that says there is more but gives no token is truncated", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({ issues: pageOfIssues(10), isLast: false }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(listing.issues.length, 10);
+  assert.equal(listing.truncated, true);
+});
+
 test("an error from Jira is reported with its status", async () => {
   const { fetchImpl } = fakeFetch([jsonResponse({ message: "nope" }, 401)]);
   await assert.rejects(

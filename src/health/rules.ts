@@ -110,9 +110,17 @@ function blockingRelation(
  * no parent, no epic, no issue links and no child. A resolved issue is not
  * reported: work that is finished and no longer linked is history, not an
  * orphan.
+ *
+ * When the listing of the project is not complete, an issue that is not in
+ * it may still point at this one, so the finding is reported as low severity
+ * and says that nothing in the listing points at the issue.
  */
-export function findOrphanedIssues(issues: readonly Issue[]): Finding[] {
+export function findOrphanedIssues(
+  issues: readonly Issue[],
+  options?: { complete?: boolean },
+): Finding[] {
   const pointing = issuesPointingAt(issues);
+  const complete = options?.complete ?? true;
   const findings: Finding[] = [];
 
   for (const issue of issues) {
@@ -131,9 +139,10 @@ export function findOrphanedIssues(issues: readonly Issue[]): Finding[] {
       category: "orphaned-issue",
       issueKey: issue.key,
       summary: issue.summary,
-      detail:
-        "The issue has no parent, no epic and no link to another issue, and no issue points at it.",
-      severity: "medium",
+      detail: complete
+        ? "The issue has no parent, no epic and no link to another issue, and no issue points at it."
+        : `The issue has no parent, no epic and no link to another issue, and no issue in the listing of ${issues.length} issues points at it.`,
+      severity: complete ? "medium" : "low",
       relatedKeys: [],
     });
   }

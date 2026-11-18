@@ -207,9 +207,16 @@ export class JiraClient {
      * Why the listing stopped:
      * - `source`: the site said there is nothing more to read;
      * - `cap`: the issue cap was reached and more issues may exist;
-     * - `pages`: the page cap was reached and more pages may exist.
+     * - `pages`: the page cap was reached and more pages may exist;
+     * - `unreadable`: the site said there was more but gave no way to
+     *   read it, so the listing is incomplete.
      */
-    let stopReason: "source" | "cap" | "pages" | undefined;
+    let stopReason:
+      | "source"
+      | "cap"
+      | "pages"
+      | "unreadable"
+      | undefined;
 
     for (let page = 0; page < MAX_PAGES && stopReason === undefined; page += 1) {
       const remaining = limit - issues.length;
@@ -218,9 +225,10 @@ export class JiraClient {
         break;
       }
 
+      const requested = Math.min(PAGE_SIZE, remaining);
       const search = new URLSearchParams({
         jql,
-        maxResults: String(Math.min(PAGE_SIZE, remaining)),
+        maxResults: String(requested),
         fields: ISSUE_FIELDS,
       });
 
@@ -257,24 +265,42 @@ export class JiraClient {
         | undefined;
 
       let sourceHasMore: boolean;
+      let unreadable = false;
       if (path === CURSOR_SEARCH_PATH) {
         const isLast = pagePayload?.isLast === true;
         const token =
           typeof pagePayload?.nextPageToken === "string"
             ? pagePayload.nextPageToken
             : undefined;
-        sourceHasMore = !isLast && token !== undefined && pageIssues.length > 0;
-        nextPageToken = token;
+        if (isLast) {
+          sourceHasMore = false;
+        } else if (token === undefined) {
+          // The site says there is more but gives no way to read it.
+          sourceHasMore = false;
+          unreadable = true;
+        } else {
+          sourceHasMore = pageIssues.length > 0;
+          nextPageToken = token;
+        }
       } else {
         const total =
           typeof pagePayload?.total === "number" ? pagePayload.total : undefined;
-        const totalReached =
-          total !== undefined && startAt + pageIssues.length >= total;
-        sourceHasMore =
-          pageIssues.length >= PAGE_SIZE && !totalReached && pageIssues.length > 0;
+        if (total !== undefined) {
+          // The site states how many issues the project holds, so the
+          // listing is complete as soon as that many were read.
+          sourceHasMore = startAt + pageIssues.length < total;
+        } else {
+          // Without a total, the listing ends when the site returns fewer
+          // issues than were asked for.
+          sourceHasMore = pageIssues.length >= requested;
+        }
         startAt += pageIssues.length;
       }
 
+      if (unreadable) {
+        stopReason = "unreadable";
+        break;
+      }
       if (!sourceHasMore) {
         stopReason = "source";
         break;
