@@ -54,9 +54,10 @@ const ISSUE_FIELDS = [
   "priority",
   "duedate",
   "project",
-  "epicLink",
-  // Jira Cloud exposes the epic link as a custom field; the named field is
-  // read as well, so a project that uses either one is covered.
+  // The Epic Link field of Jira Cloud and Jira Server. The named field
+  // "epicLink" is not asked for, because no installation defines it and a
+  // site may refuse a request that names a field it does not know. The
+  // normalizer still reads it if a site sends it anyway.
   "customfield_10014",
 ].join(",");
 
@@ -255,9 +256,9 @@ export class JiraClient {
       }
       this.searchPath = path;
 
-      const pageIssues = normalizeIssues(
-        (payload as { issues?: unknown } | undefined)?.issues,
-      );
+      const rawIssues = (payload as { issues?: unknown } | undefined)?.issues;
+      const rawCount = Array.isArray(rawIssues) ? rawIssues.length : 0;
+      const pageIssues = normalizeIssues(rawIssues);
       issues.push(...pageIssues);
 
       const pagePayload = payload as
@@ -278,8 +279,13 @@ export class JiraClient {
           // The site says there is more but gives no way to read it.
           sourceHasMore = false;
           unreadable = true;
+        } else if (pageIssues.length === 0) {
+          // The site says there is more, gives a way to read it, and then
+          // hands over an empty page. The listing is incomplete.
+          sourceHasMore = false;
+          unreadable = true;
         } else {
-          sourceHasMore = pageIssues.length > 0;
+          sourceHasMore = true;
           nextPageToken = token;
         }
       } else {
@@ -287,14 +293,20 @@ export class JiraClient {
           typeof pagePayload?.total === "number" ? pagePayload.total : undefined;
         if (total !== undefined) {
           // The site states how many issues the project holds, so the
-          // listing is complete as soon as that many were read.
-          sourceHasMore = startAt + pageIssues.length < total;
+          // listing is complete as soon as that many were read. An empty
+          // page ends it as well, so an overstated total cannot make the
+          // client ask for the same page again and again.
+          sourceHasMore =
+            pageIssues.length > 0 && startAt + rawCount < total;
         } else {
           // Without a total, the listing ends when the site returns fewer
           // issues than were asked for.
           sourceHasMore = pageIssues.length >= requested;
         }
-        startAt += pageIssues.length;
+        // The offset moves by the number of issues the site returned, not by
+        // the number that could be normalized, so the next window does not
+        // overlap this one.
+        startAt += rawCount;
       }
 
       if (unreadable) {

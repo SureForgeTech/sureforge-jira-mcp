@@ -286,6 +286,65 @@ test("a cursor page that says there is more but gives no token is truncated", as
   assert.equal(listing.truncated, true);
 });
 
+test("a cursor page that is empty while the site says there is more is truncated", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      issues: pageOfIssues(10),
+      isLast: false,
+      nextPageToken: "second",
+    }),
+    jsonResponse({ issues: [], isLast: false, nextPageToken: "third" }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(listing.issues.length, 10);
+  assert.equal(listing.truncated, true);
+});
+
+test("an empty page ends the offset listing even when the total is larger", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ issues: [], total: 500 }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(listing.issues.length, 0);
+  assert.equal(
+    requests.length,
+    2,
+    "the client must not ask for the same empty page again and again",
+  );
+});
+
+test("the offset moves by the issues the site returned, not by the ones kept", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({
+      issues: [
+        { key: "EX-1", fields: {} },
+        { id: "2", fields: {} },
+        { key: "EX-3", fields: {} },
+      ],
+      total: 6,
+    }),
+    jsonResponse({
+      issues: [
+        { key: "EX-4", fields: {} },
+        { id: "5", fields: {} },
+        { key: "EX-6", fields: {} },
+      ],
+      total: 6,
+    }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(requests[2].url.searchParams.get("startAt"), "3");
+  assert.deepEqual(
+    listing.issues.map((issue) => issue.key),
+    ["EX-1", "EX-3", "EX-4", "EX-6"],
+  );
+});
+
 test("an error from Jira is reported with its status", async () => {
   const { fetchImpl } = fakeFetch([jsonResponse({ message: "nope" }, 401)]);
   await assert.rejects(

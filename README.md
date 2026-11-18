@@ -20,10 +20,11 @@ ordered worst first.
 
 Every tool result carries `issuesExamined`, the number of issues it looked
 at. A listing reads at most 2000 issues per project; when that cap is
-reached the result also carries `truncated: true`, and a parent, epic or
-issue that is not in the listing is reported as "not found in the listing"
-rather than as a broken hierarchy or an orphan, because a partial listing
-cannot prove that an issue does not exist.
+reached the result also carries `truncated: true`. A parent or epic that is
+not in an incomplete listing is reported as "not found in the listing" rather
+than as a broken hierarchy, and an issue that nothing in an incomplete listing
+points at is reported as an orphan with a lower severity and a hedged
+detail, because a partial listing cannot prove that an issue does not exist.
 
 ## Configuration
 
