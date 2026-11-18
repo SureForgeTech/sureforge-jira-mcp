@@ -5,13 +5,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { healthcheck, main } from "./index.js";
+import { healthcheck, runCli } from "./index.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./version.js";
 
-/** Run `main` with the given arguments and capture what it writes. */
-function run(
+const COMPLETE_ENV = {
+  JIRA_BASE_URL: "https://example.atlassian.net",
+  JIRA_EMAIL: "reader@example.com",
+  JIRA_API_TOKEN: "example-token-value",
+  JIRA_PROJECT_KEY: "EXAMPLE",
+};
+
+/** Run the command line and capture what it writes. */
+async function run(
   argv: string[],
-): { code: number; stdout: string; stderr: string } {
+  env: Record<string, string | undefined> = {},
+): Promise<{ code: number; stdout: string; stderr: string }> {
   const originalOut = process.stdout.write.bind(process.stdout);
   const originalErr = process.stderr.write.bind(process.stderr);
   let stdout = "";
@@ -26,7 +34,7 @@ function run(
   }) as typeof process.stderr.write;
 
   try {
-    const code = main(argv);
+    const code = await runCli(argv, env);
     return { code, stdout, stderr };
   } finally {
     process.stdout.write = originalOut;
@@ -34,36 +42,47 @@ function run(
   }
 }
 
-test("--version prints the package name and version", () => {
-  const result = run(["--version"]);
+test("--version prints the package name and version", async () => {
+  const result = await run(["--version"]);
   assert.equal(result.code, 0);
   assert.equal(result.stdout, `${PACKAGE_NAME} ${PACKAGE_VERSION}\n`);
 });
 
-test("--help prints the usage text", () => {
-  const result = run(["--help"]);
+test("--help prints the usage text", async () => {
+  const result = await run(["--help"]);
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Usage: sureforge-jira-mcp/);
 });
 
-test("no arguments prints the healthcheck and exits cleanly", () => {
-  const result = run([]);
+test("--healthcheck reports that the server is not configured", async () => {
+  const result = await run(["--healthcheck"], {});
   assert.equal(result.code, 0);
-  assert.deepEqual(JSON.parse(result.stdout), healthcheck());
+  const status = JSON.parse(result.stdout);
+  assert.equal(status.configured, false);
+  assert.equal(status.name, PACKAGE_NAME);
 });
 
-test("--healthcheck prints the same status object as the default mode", () => {
-  const explicit = run(["--healthcheck"]);
-  const implicit = run([]);
-  assert.equal(explicit.code, 0);
-  assert.equal(explicit.stdout, implicit.stdout);
+test("--healthcheck reports the configuration without the token", async () => {
+  const result = await run(["--healthcheck"], COMPLETE_ENV);
+  assert.equal(result.code, 0);
+  const status = JSON.parse(result.stdout);
+  assert.equal(status.configured, true);
+  assert.equal(status.projectKey, "EXAMPLE");
+  assert.equal(status.baseUrl, "https://example.atlassian.net");
+  assert.equal(result.stdout.includes("example-token-value"), false);
 });
 
-test("an unknown flag exits with code 2 and writes to stderr", () => {
-  const result = run(["--nope"]);
+test("an unknown flag exits with code 2 and writes to stderr", async () => {
+  const result = await run(["--nope"], {});
   assert.equal(result.code, 2);
   assert.match(result.stderr, /Unknown argument/);
   assert.equal(result.stdout, "");
+});
+
+test("starting without a configuration exits with code 2 and names the variable", async () => {
+  const result = await run([], {});
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /JIRA_BASE_URL/);
 });
 
 test("the healthcheck object names the package and the node version", () => {
@@ -71,6 +90,7 @@ test("the healthcheck object names the package and the node version", () => {
   assert.equal(status.name, PACKAGE_NAME);
   assert.equal(status.version, PACKAGE_VERSION);
   assert.match(status.node, /^v\d+\./);
+  assert.equal(status.configured, false);
 });
 
 test("the built entry point starts with a node shebang", () => {
