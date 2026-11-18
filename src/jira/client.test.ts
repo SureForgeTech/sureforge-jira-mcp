@@ -22,6 +22,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 /** A `fetch` that answers from a queue and records what it was asked. */
 function fakeFetch(
   responses: Array<Response | (() => Response | Promise<Response>)>,
+  options?: { repeatLast?: boolean },
 ): { fetchImpl: typeof fetch; requests: RecordedRequest[] } {
   const requests: RecordedRequest[] = [];
   let index = 0;
@@ -34,8 +35,11 @@ function fakeFetch(
           ? undefined
           : new Headers(init.headers).get("authorization") ?? undefined,
     });
-    const next = responses[index];
+    let next = responses[index];
     index += 1;
+    if (next === undefined && options?.repeatLast === true) {
+      next = responses[responses.length - 1];
+    }
     if (next === undefined) {
       throw new Error(`no response prepared for ${url}`);
     }
@@ -204,6 +208,43 @@ test("a listing that reaches the cap is marked as truncated", async () => {
   assert.equal(listing.issues.length, 150);
   assert.equal(listing.truncated, true);
   assert.equal(listing.examined, 150);
+});
+
+test("a listing that ends exactly at the cap is not truncated", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      issues: pageOfIssues(100),
+      isLast: false,
+      nextPageToken: "more",
+    }),
+    jsonResponse({ issues: pageOfIssues(50, 100), isLast: true }),
+  ]);
+
+  const listing = await client(fetchImpl, 150).listIssues("EX");
+  assert.equal(listing.issues.length, 150);
+  assert.equal(
+    listing.truncated,
+    false,
+    "the site said this was the last page",
+  );
+});
+
+test("a listing that stops at the page cap is marked as truncated", async () => {
+  const { fetchImpl } = fakeFetch(
+    [
+      () =>
+        jsonResponse({
+          issues: pageOfIssues(1),
+          isLast: false,
+          nextPageToken: "more",
+        }),
+    ],
+    { repeatLast: true },
+  );
+
+  const listing = await client(fetchImpl, 5000).listIssues("EX");
+  assert.equal(listing.truncated, true);
+  assert.equal(listing.issues.length, 50);
 });
 
 test("an error from Jira is reported with its status", async () => {

@@ -15,7 +15,7 @@ import {
   findOrphanedIssues,
   findStaleBlockers,
 } from "./health/rules.js";
-import { summarizeHealth } from "./health/summary.js";
+import { sortFindings, summarizeHealth } from "./health/summary.js";
 import type { Finding, Issue, IssueListing, ProjectVersion } from "./jira/types.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./version.js";
 
@@ -139,6 +139,17 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     ...(complete ? {} : { truncated: true }),
   });
 
+  /**
+   * The findings of a tool, worst first.
+   *
+   * The order is applied before the limit, so a limit keeps the findings
+   * that matter and not the ones that happen to come first.
+   */
+  const ranked = (
+    findings: readonly Finding[],
+    limit: number,
+  ): Finding[] => sortFindings(findings).slice(0, limit);
+
   const register = <S extends z.ZodRawShape>(
     name: ToolName,
     config: {
@@ -177,7 +188,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
         projectKey,
         count: findings.length,
         ...listingReport(issues, complete),
-        findings: findings.slice(0, args.limit ?? 100),
+        findings: ranked(findings, args.limit ?? 100),
       };
     },
   );
@@ -198,7 +209,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
         projectKey,
         count: findings.length,
         ...listingReport(issues, complete),
-        findings: findings.slice(0, args.limit ?? 100),
+        findings: ranked(findings, args.limit ?? 100),
       };
     },
   );
@@ -232,7 +243,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
         projectKey,
         count: findings.length,
         ...listingReport(issues, complete),
-        findings: findings.slice(0, args.limit ?? 100),
+        findings: ranked(findings, args.limit ?? 100),
       };
     },
   );
@@ -267,7 +278,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
         projectKey,
         count: findings.length,
         ...listingReport(issues, complete),
-        findings: findings.slice(0, args.limit ?? 100),
+        findings: ranked(findings, args.limit ?? 100),
       };
     },
   );

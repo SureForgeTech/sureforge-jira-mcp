@@ -276,6 +276,50 @@ test("a truncated listing is reported and softens the missing parent finding", a
   }
 });
 
+test("a limit keeps the findings that matter, not the ones that come first", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          // A medium finding first, a high finding second.
+          makeIssue({
+            key: "EX-1",
+            updated: "2026-02-28T00:00:00.000Z",
+            issueLinks: [
+              { type: "Blocks", direction: "outward", targetKey: "EX-3" },
+            ],
+          }),
+          makeIssue({
+            key: "EX-2",
+            updated: "2026-01-01T00:00:00.000Z",
+            issueLinks: [
+              { type: "Blocks", direction: "outward", targetKey: "EX-3" },
+            ],
+          }),
+          makeIssue({ key: "EX-3", fixVersions: ["1.0.0"] }),
+        ],
+        truncated: false,
+        examined: 3,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_stale_blockers",
+      arguments: { limit: 1 },
+    });
+    const findings = payload(result).findings as Array<{
+      issueKey: string;
+      severity: string;
+    }>;
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].issueKey, "EX-2");
+    assert.equal(findings[0].severity, "high");
+  } finally {
+    await close();
+  }
+});
+
 test("the tools accept another project key", async () => {
   const asked: string[] = [];
   const { client, close } = await connect(

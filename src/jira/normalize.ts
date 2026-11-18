@@ -19,7 +19,7 @@ interface RawIssue {
     resolution?: { name?: unknown } | null;
     parent?: { key?: unknown } | null;
     epicLink?: { key?: unknown } | null;
-    customfield_10014?: { key?: unknown } | null;
+    customfield_10014?: { key?: unknown } | string | null;
     fixVersions?: Array<{ name?: unknown }>;
     labels?: unknown;
     created?: unknown;
@@ -78,6 +78,23 @@ function readIssueLinks(raw: unknown): IssueLink[] {
 }
 
 /**
+ * Read the key of an epic link.
+ *
+ * The link is read from the named field or from the custom field Jira Cloud
+ * uses. The custom field holds either an object with a key or the key
+ * itself, depending on the site, and both are read.
+ */
+function epicLinkKey(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return text(value);
+  }
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
+  return text((value as { key?: unknown }).key);
+}
+
+/**
  * Normalize one REST issue.
  *
  * Returns `undefined` for an issue without a key: without a key it cannot be
@@ -104,7 +121,8 @@ export function normalizeIssue(raw: unknown): Issue | undefined {
     : [];
   // Jira Cloud exposes the epic link as a custom field, other installations
   // expose it under its name. Either one is read.
-  const epicKey = text(fields.epicLink?.key) ?? text(fields.customfield_10014?.key);
+  const epicKey =
+    epicLinkKey(fields.epicLink) ?? epicLinkKey(fields.customfield_10014);
 
   return {
     key,

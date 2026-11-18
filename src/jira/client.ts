@@ -203,12 +203,24 @@ export class JiraClient {
     const issues: Issue[] = [];
     let nextPageToken: string | undefined;
     let startAt = 0;
-    let exhausted = false;
+    /**
+     * Why the listing stopped:
+     * - `source`: the site said there is nothing more to read;
+     * - `cap`: the issue cap was reached and more issues may exist;
+     * - `pages`: the page cap was reached and more pages may exist.
+     */
+    let stopReason: "source" | "cap" | "pages" | undefined;
 
-    for (let page = 0; page < MAX_PAGES && !exhausted; page += 1) {
+    for (let page = 0; page < MAX_PAGES && stopReason === undefined; page += 1) {
+      const remaining = limit - issues.length;
+      if (remaining <= 0) {
+        stopReason = "cap";
+        break;
+      }
+
       const search = new URLSearchParams({
         jql,
-        maxResults: String(Math.min(PAGE_SIZE, limit - issues.length)),
+        maxResults: String(Math.min(PAGE_SIZE, remaining)),
         fields: ISSUE_FIELDS,
       });
 
@@ -227,8 +239,10 @@ export class JiraClient {
           throw error;
         }
         // The site does not know the current endpoint: use the earlier one
-        // from here on, and try this page again against it.
+        // from here on, and try this page again against it. The page is not
+        // counted twice.
         this.searchPath = OFFSET_SEARCH_PATH;
+        page -= 1;
         continue;
       }
       this.searchPath = path;
@@ -242,40 +256,43 @@ export class JiraClient {
         | { isLast?: unknown; nextPageToken?: unknown; total?: unknown }
         | undefined;
 
+      let sourceHasMore: boolean;
       if (path === CURSOR_SEARCH_PATH) {
         const isLast = pagePayload?.isLast === true;
         const token =
           typeof pagePayload?.nextPageToken === "string"
             ? pagePayload.nextPageToken
             : undefined;
-        if (isLast || token === undefined || pageIssues.length === 0) {
-          exhausted = true;
-          continue;
-        }
+        sourceHasMore = !isLast && token !== undefined && pageIssues.length > 0;
         nextPageToken = token;
       } else {
         const total =
           typeof pagePayload?.total === "number" ? pagePayload.total : undefined;
-        if (pageIssues.length < PAGE_SIZE) {
-          exhausted = true;
-          continue;
-        }
-        if (total !== undefined && startAt + pageIssues.length >= total) {
-          exhausted = true;
-          continue;
-        }
+        const totalReached =
+          total !== undefined && startAt + pageIssues.length >= total;
+        sourceHasMore =
+          pageIssues.length >= PAGE_SIZE && !totalReached && pageIssues.length > 0;
         startAt += pageIssues.length;
       }
 
-      if (issues.length >= limit) {
-        exhausted = true;
+      if (!sourceHasMore) {
+        stopReason = "source";
+        break;
       }
+      if (issues.length >= limit) {
+        stopReason = "cap";
+        break;
+      }
+    }
+
+    if (stopReason === undefined) {
+      stopReason = "pages";
     }
 
     const kept = issues.slice(0, limit);
     return {
       issues: kept,
-      truncated: kept.length >= limit,
+      truncated: stopReason !== "source",
       examined: kept.length,
     };
   }
