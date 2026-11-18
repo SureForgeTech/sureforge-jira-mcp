@@ -230,14 +230,19 @@ test("a listing that ends exactly at the cap is not truncated", async () => {
 });
 
 test("a listing that stops at the page cap is marked as truncated", async () => {
+  // Every page holds a different issue, so the site keeps offering more and
+  // the listing runs into the page cap.
+  let call = 0;
   const { fetchImpl } = fakeFetch(
     [
-      () =>
-        jsonResponse({
-          issues: pageOfIssues(1),
+      () => {
+        call += 1;
+        return jsonResponse({
+          issues: [{ key: `EX-${call}`, fields: {} }],
           isLast: false,
-          nextPageToken: "more",
-        }),
+          nextPageToken: `token-${call}`,
+        });
+      },
     ],
     { repeatLast: true },
   );
@@ -245,6 +250,25 @@ test("a listing that stops at the page cap is marked as truncated", async () => 
   const listing = await client(fetchImpl, 5000).listIssues("EX");
   assert.equal(listing.truncated, true);
   assert.equal(listing.issues.length, 50);
+});
+
+test("a site that repeats the same page ends the listing instead of repeating it", async () => {
+  const { fetchImpl, requests } = fakeFetch(
+    [
+      () =>
+        jsonResponse({
+          issues: [{ key: "EX-1", fields: {} }],
+          isLast: false,
+          nextPageToken: "the-same-token",
+        }),
+    ],
+    { repeatLast: true },
+  );
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(requests.length, 2, "the repeated page is not read again and again");
+  assert.equal(listing.issues.length, 1);
+  assert.equal(listing.truncated, true);
 });
 
 test("the offset path reports a listing that stops short of the project as truncated", async () => {
@@ -360,7 +384,78 @@ test("the offset path keeps reading when a page holds issues without a key", asy
     listing.issues.map((issue) => issue.key),
     ["EX-1", "EX-4", "EX-6"],
   );
-  assert.equal(listing.truncated, false);
+  assert.equal(
+    listing.truncated,
+    true,
+    "the site returned issues without a key, so the listing is incomplete",
+  );
+  assert.equal(listing.dropped, 3);
+});
+
+test("the offset path keeps reading when no issue of a page has a key", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    // A full page of issues that carry no key: the site answered the whole
+    // page, so there is more to read.
+    jsonResponse({
+      issues: Array.from({ length: 100 }, (_, index) => ({
+        id: String(index),
+        fields: {},
+      })),
+    }),
+    jsonResponse({
+      issues: [{ key: "EX-4", fields: {} }],
+    }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(
+    requests.length,
+    3,
+    "a page whose issues have no key must not end the listing",
+  );
+  assert.deepEqual(
+    listing.issues.map((issue) => issue.key),
+    ["EX-4"],
+  );
+});
+
+test("a site that refuses the Epic Link field is read without it", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "unknown field" }, 400),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }], isLast: true }),
+  ]);
+
+  const listing = await client(fetchImpl).listIssues("EX");
+  assert.equal(listing.issues.length, 1);
+  assert.equal(requests.length, 2);
+  assert.ok(
+    requests[0].url.searchParams.get("fields")?.includes("customfield_10014"),
+    "the first request asks for the Epic Link field",
+  );
+  assert.equal(
+    requests[1].url.searchParams.get("fields")?.includes("customfield_10014"),
+    false,
+    "the second request does not ask for it any more",
+  );
+});
+
+test("the Epic Link field can be named by the configuration", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ issues: [], isLast: true }),
+  ]);
+  const jira = new JiraClient({
+    baseUrl: "https://example.atlassian.net",
+    email: "reader@example.com",
+    apiToken: "example-token-value",
+    fetchImpl,
+    epicLinkField: "customfield_10100",
+  });
+
+  await jira.listIssues("EX");
+  assert.ok(
+    requests[0].url.searchParams.get("fields")?.includes("customfield_10100"),
+  );
 });
 
 test("the offset moves by the issues the site returned, not by the ones kept", async () => {

@@ -66,6 +66,9 @@ export async function startServer(config: JiraConfig): Promise<void> {
     email: config.email,
     apiToken: config.apiToken,
     timeoutMs: config.timeoutMs,
+    ...(config.epicLinkField === undefined
+      ? {}
+      : { epicLinkField: config.epicLinkField }),
   });
 
   const server = createJiraServer({

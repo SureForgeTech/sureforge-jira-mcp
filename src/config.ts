@@ -30,6 +30,13 @@ export interface JiraConfig {
   readonly maxDepth: number;
   /** The request timeout in milliseconds. */
   readonly timeoutMs: number;
+  /**
+   * The id of the Epic Link field, for example `customfield_10014`.
+   *
+   * The id is site-specific. It is asked for by default, and a site that
+   * refuses the request is read without the field rather than failing.
+   */
+  readonly epicLinkField?: string;
 }
 
 /** The environment the configuration is read from. */
@@ -44,6 +51,7 @@ export const CONFIG_VARIABLES = [
   "JIRA_STALE_DAYS",
   "JIRA_MAX_DEPTH",
   "JIRA_TIMEOUT_MS",
+  "JIRA_EPIC_LINK_FIELD",
 ] as const;
 
 const DEFAULT_STALE_DAYS = 14;
@@ -154,6 +162,10 @@ export function loadConfig(env: Environment = process.env): JiraConfig {
       DEFAULT_TIMEOUT_MS,
       1,
     ),
+    ...(env.JIRA_EPIC_LINK_FIELD === undefined ||
+    env.JIRA_EPIC_LINK_FIELD.trim() === ""
+      ? {}
+      : { epicLinkField: env.JIRA_EPIC_LINK_FIELD.trim() }),
   };
 }
 
@@ -184,5 +196,8 @@ export function describeConfig(config: JiraConfig): Record<string, unknown> {
     staleDays: config.staleDays,
     maxDepth: config.maxDepth,
     timeoutMs: config.timeoutMs,
+    ...(config.epicLinkField === undefined
+      ? {}
+      : { epicLinkField: config.epicLinkField }),
   };
 }

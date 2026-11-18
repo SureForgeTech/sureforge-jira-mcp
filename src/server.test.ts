@@ -25,6 +25,7 @@ function reader(overrides?: Partial<JiraReader>): JiraReader {
     listIssues: async () => ({
       issues: ISSUES,
       truncated: false,
+      dropped: 0,
       examined: ISSUES.length,
     }),
     listVersions: async (): Promise<ProjectVersion[]> => EXAMPLE_VERSIONS,
@@ -218,7 +219,7 @@ test("the summary counts every category", async () => {
 test("the summary is healthy when there is nothing to report", async () => {
   const { client, close } = await connect(
     reader({
-      listIssues: async () => ({ issues: [], truncated: false, examined: 0 }),
+      listIssues: async () => ({ issues: [], truncated: false, dropped: 0, examined: 0 }),
       listVersions: async () => [],
     }),
   );
@@ -254,6 +255,7 @@ test("a truncated listing is reported and softens the missing parent finding", a
       listIssues: async () => ({
         issues: ISSUES,
         truncated: true,
+        dropped: 0,
         examined: ISSUES.length,
       }),
     }),
@@ -302,6 +304,7 @@ test("a limit keeps the findings that matter, not the ones that come first", asy
           makeIssue({ key: "EX-4", fixVersions: ["1.0.0"] }),
         ],
         truncated: false,
+        dropped: 0,
         examined: 4,
       }),
     }),
@@ -329,6 +332,7 @@ test("a truncated listing softens the orphan finding", async () => {
       listIssues: async () => ({
         issues: [makeIssue({ key: "EX-1" })],
         truncated: true,
+        dropped: 0,
         examined: 1,
       }),
     }),
@@ -399,7 +403,7 @@ test("the tools accept another project key", async () => {
     reader({
       listIssues: async (projectKey: string) => {
         asked.push(projectKey);
-        return { issues: [], truncated: false, examined: 0 };
+        return { issues: [], truncated: false, dropped: 0, examined: 0 };
       },
     }),
   );

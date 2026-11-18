@@ -37,10 +37,21 @@ export interface JiraClientOptions {
   readonly timeoutMs?: number;
   /** The largest number of issues one listing may return; defaults to 2000. */
   readonly maxIssues?: number;
+  /**
+   * The id of the Epic Link field, for example `customfield_10014`.
+   *
+   * The id is site-specific: a project in the classic layout or on Jira
+   * Server uses another one. When the site refuses the field, the listing
+   * is read without it rather than failing.
+   */
+  readonly epicLinkField?: string;
 }
 
+/** The default id of the Epic Link field. */
+export const DEFAULT_EPIC_LINK_FIELD = "customfield_10014";
+
 /** The fields the health rules read. */
-const ISSUE_FIELDS = [
+const BASE_ISSUE_FIELDS = [
   "summary",
   "status",
   "issuetype",
@@ -54,12 +65,21 @@ const ISSUE_FIELDS = [
   "priority",
   "duedate",
   "project",
-  // The Epic Link field of Jira Cloud and Jira Server. The named field
-  // "epicLink" is not asked for, because no installation defines it and a
-  // site may refuse a request that names a field it does not know. The
-  // normalizer still reads it if a site sends it anyway.
-  "customfield_10014",
-].join(",");
+];
+
+/**
+ * The fields one request asks for.
+ *
+ * The Epic Link field is asked for by its id, because no installation names
+ * it `epicLink` and a site may refuse a request that names a field it does
+ * not know.
+ */
+export function issueFields(epicLinkField?: string): string {
+  const field = epicLinkField?.trim();
+  return field === undefined || field === ""
+    ? BASE_ISSUE_FIELDS.join(",")
+    : [...BASE_ISSUE_FIELDS, field].join(",");
+}
 
 /** The number of issues one search page may return. */
 const PAGE_SIZE = 100;
@@ -114,6 +134,11 @@ function isUnknownEndpoint(error: unknown): boolean {
   );
 }
 
+/** Whether a status means the site refused the request itself. */
+function isRefusedRequest(error: unknown): boolean {
+  return error instanceof JiraError && error.status === 400;
+}
+
 export class JiraClient {
   readonly baseUrl: string;
   private readonly email: string;
@@ -121,8 +146,11 @@ export class JiraClient {
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
   private readonly maxIssues: number;
+  private readonly epicLinkField?: string;
   /** The search endpoint that worked, remembered after the first page. */
   private searchPath?: string;
+  /** Whether the site accepts the Epic Link field. */
+  private epicLinkFieldRefused = false;
 
   constructor(options: JiraClientOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
@@ -131,6 +159,7 @@ export class JiraClient {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? 15000;
     this.maxIssues = options.maxIssues ?? DEFAULT_MAX_ISSUES;
+    this.epicLinkField = options.epicLinkField ?? DEFAULT_EPIC_LINK_FIELD;
   }
 
   /** The authorization header. The token never leaves this method. */
@@ -202,6 +231,8 @@ export class JiraClient {
     const limit = Math.min(options?.maxIssues ?? this.maxIssues, this.maxIssues);
 
     const issues: Issue[] = [];
+    const seenKeys = new Set<string>();
+    let dropped = 0;
     let nextPageToken: string | undefined;
     let startAt = 0;
     /**
@@ -210,7 +241,7 @@ export class JiraClient {
      * - `cap`: the issue cap was reached and more issues may exist;
      * - `pages`: the page cap was reached and more pages may exist;
      * - `unreadable`: the site said there was more but gave no way to
-     *   read it, so the listing is incomplete.
+     *   read it, or it repeated a page, so the listing is incomplete.
      */
     let stopReason:
       | "source"
@@ -230,7 +261,9 @@ export class JiraClient {
       const search = new URLSearchParams({
         jql,
         maxResults: String(requested),
-        fields: ISSUE_FIELDS,
+        fields: issueFields(
+          this.epicLinkFieldRefused ? undefined : this.epicLinkField,
+        ),
       });
 
       const path = this.searchPath ?? CURSOR_SEARCH_PATH;
@@ -244,22 +277,43 @@ export class JiraClient {
       try {
         payload = await this.request(path, search);
       } catch (error) {
-        if (this.searchPath !== undefined || !isUnknownEndpoint(error)) {
+        if (this.searchPath !== undefined) {
           throw error;
         }
-        // The site does not know the current endpoint: use the earlier one
-        // from here on, and try this page again against it. The page is not
-        // counted twice.
-        this.searchPath = OFFSET_SEARCH_PATH;
-        page -= 1;
-        continue;
+        if (isUnknownEndpoint(error)) {
+          // The site does not know the current endpoint: use the earlier
+          // one from here on, and try this page again against it. The page
+          // is not counted twice.
+          this.searchPath = OFFSET_SEARCH_PATH;
+          page -= 1;
+          continue;
+        }
+        if (
+          isRefusedRequest(error) &&
+          !this.epicLinkFieldRefused &&
+          this.epicLinkField !== undefined
+        ) {
+          // The site refused the request, most likely because of the Epic
+          // Link field. Read the listing without it rather than failing:
+          // the epic link is then not known, and the listing says so.
+          this.epicLinkFieldRefused = true;
+          page -= 1;
+          continue;
+        }
+        throw error;
       }
       this.searchPath = path;
 
       const rawIssues = (payload as { issues?: unknown } | undefined)?.issues;
       const rawCount = Array.isArray(rawIssues) ? rawIssues.length : 0;
       const pageIssues = normalizeIssues(rawIssues);
-      issues.push(...pageIssues);
+      dropped += rawCount - pageIssues.length;
+
+      const fresh = pageIssues.filter((issue) => !seenKeys.has(issue.key));
+      for (const issue of fresh) {
+        seenKeys.add(issue.key);
+      }
+      issues.push(...fresh);
 
       const pagePayload = payload as
         | { isLast?: unknown; nextPageToken?: unknown; total?: unknown }
@@ -279,9 +333,14 @@ export class JiraClient {
           // The site says there is more but gives no way to read it.
           sourceHasMore = false;
           unreadable = true;
-        } else if (pageIssues.length === 0) {
+        } else if (rawCount === 0) {
           // The site says there is more, gives a way to read it, and then
           // hands over an empty page. The listing is incomplete.
+          sourceHasMore = false;
+          unreadable = true;
+        } else if (fresh.length === 0) {
+          // The site repeats a page. Reading it again would only repeat the
+          // same issues.
           sourceHasMore = false;
           unreadable = true;
         } else {
@@ -302,6 +361,10 @@ export class JiraClient {
               // an empty page, so the listing is incomplete.
               unreadable = true;
             }
+          } else if (fresh.length === 0) {
+            // The site repeats a page.
+            sourceHasMore = false;
+            unreadable = true;
           } else {
             sourceHasMore = more;
           }
@@ -337,8 +400,12 @@ export class JiraClient {
     const kept = issues.slice(0, limit);
     return {
       issues: kept,
-      truncated: stopReason !== "source",
+      // An issue without a key is left out of the listing, and such an issue
+      // may point at another one. The listing is therefore incomplete when
+      // any issue was left out.
+      truncated: stopReason !== "source" || dropped > 0,
       examined: kept.length,
+      dropped,
     };
   }
 

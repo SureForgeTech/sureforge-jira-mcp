@@ -81,6 +81,14 @@ export interface IssueListing {
   readonly truncated: boolean;
   /** The number of issues that were read. */
   readonly examined: number;
+  /**
+   * The number of issues the site returned that carried no key and were
+   * therefore left out.
+   *
+   * Such an issue may point at another one, so a listing that left any out
+   * does not cover the whole project either.
+   */
+  readonly dropped: number;
 }
 
 /** The categories of finding the health rules produce. */

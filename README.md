@@ -40,6 +40,7 @@ disk and no credential is ever committed.
 | `JIRA_STALE_DAYS` | no | Days without an update that make a blocker stale. Defaults to 14. |
 | `JIRA_MAX_DEPTH` | no | Levels a hierarchy may have before it is reported. Defaults to 5. |
 | `JIRA_TIMEOUT_MS` | no | The request timeout in milliseconds. Defaults to 15000. |
+| `JIRA_EPIC_LINK_FIELD` | no | The id of the Epic Link field, `customfield_10014` by default. The id is site-specific; a site that refuses the request is read without the field instead of failing. |
 
 Check what is set without printing a value:
 
