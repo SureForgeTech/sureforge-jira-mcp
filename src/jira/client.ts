@@ -293,15 +293,22 @@ export class JiraClient {
           typeof pagePayload?.total === "number" ? pagePayload.total : undefined;
         if (total !== undefined) {
           // The site states how many issues the project holds, so the
-          // listing is complete as soon as that many were read. An empty
-          // page ends it as well, so an overstated total cannot make the
-          // client ask for the same page again and again.
-          sourceHasMore =
-            pageIssues.length > 0 && startAt + rawCount < total;
+          // listing is complete as soon as that many were read.
+          const more = startAt + rawCount < total;
+          if (rawCount === 0) {
+            sourceHasMore = false;
+            if (more) {
+              // The site says the project holds more issues and hands over
+              // an empty page, so the listing is incomplete.
+              unreadable = true;
+            }
+          } else {
+            sourceHasMore = more;
+          }
         } else {
           // Without a total, the listing ends when the site returns fewer
           // issues than were asked for.
-          sourceHasMore = pageIssues.length >= requested;
+          sourceHasMore = rawCount >= requested;
         }
         // The offset moves by the number of issues the site returned, not by
         // the number that could be normalized, so the next window does not

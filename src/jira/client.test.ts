@@ -314,6 +314,53 @@ test("an empty page ends the offset listing even when the total is larger", asyn
     2,
     "the client must not ask for the same empty page again and again",
   );
+  assert.equal(
+    listing.truncated,
+    true,
+    "the site states the project holds more issues, so the listing is incomplete",
+  );
+});
+
+test("an empty page after some issues is an incomplete listing", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }], total: 3 }),
+    jsonResponse({ issues: [], total: 3 }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(listing.issues.length, 1);
+  assert.equal(listing.truncated, true);
+});
+
+test("the offset path keeps reading when a page holds issues without a key", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({
+      issues: [
+        { key: "EX-1", fields: {} },
+        { id: "2", fields: {} },
+        { id: "3", fields: {} },
+      ],
+      total: 6,
+    }),
+    jsonResponse({
+      issues: [
+        { key: "EX-4", fields: {} },
+        { id: "5", fields: {} },
+        { key: "EX-6", fields: {} },
+      ],
+      total: 6,
+    }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(requests.length, 3, "the second page was read as well");
+  assert.deepEqual(
+    listing.issues.map((issue) => issue.key),
+    ["EX-1", "EX-4", "EX-6"],
+  );
+  assert.equal(listing.truncated, false);
 });
 
 test("the offset moves by the issues the site returned, not by the ones kept", async () => {

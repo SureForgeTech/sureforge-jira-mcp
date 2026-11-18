@@ -351,6 +351,48 @@ test("a truncated listing softens the orphan finding", async () => {
   }
 });
 
+test("the tools that do not use the versions do not ask for them", async () => {
+  const { client, close } = await connect(
+    reader({
+      listVersions: async () => {
+        throw new Error("the versions endpoint must not be called here");
+      },
+    }),
+  );
+  try {
+    const orphaned = await client.callTool({
+      name: "jira_find_orphaned_issues",
+      arguments: {},
+    });
+    assert.notEqual((orphaned as { isError?: boolean }).isError, true);
+
+    const hierarchies = await client.callTool({
+      name: "jira_find_broken_hierarchies",
+      arguments: {},
+    });
+    assert.notEqual((hierarchies as { isError?: boolean }).isError, true);
+  } finally {
+    await close();
+  }
+});
+
+test("the tools that use the versions still ask for them", async () => {
+  const { client, close } = await connect(reader());
+  try {
+    const result = await client.callTool({
+      name: "jira_find_missing_release_versions",
+      arguments: {},
+    });
+    const findings = payload(result).findings as Array<{ issueKey: string }>;
+    assert.deepEqual(
+      findings.map((finding) => finding.issueKey),
+      ["EX-2", "EX-6"],
+    );
+  } finally {
+    await close();
+  }
+});
+
 test("the tools accept another project key", async () => {
   const asked: string[] = [];
   const { client, close } = await connect(

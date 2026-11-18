@@ -118,17 +118,22 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
   const projectOf = (args: { projectKey?: string }): string =>
     args.projectKey?.trim().toUpperCase() || options.projectKey;
 
-  const load = async (
+  /**
+   * Read the issues of a project.
+   *
+   * The listing says whether it covers the whole project, and the rules that
+   * depend on the absence of an issue follow that flag.
+   */
+  const loadIssues = async (
     projectKey: string,
-  ): Promise<{ issues: Issue[]; versions: ProjectVersion[]; complete: boolean }> => {
+  ): Promise<{ issues: Issue[]; complete: boolean }> => {
     const listing = await options.reader.listIssues(projectKey);
-    const versions = await options.reader.listVersions(projectKey);
-    return {
-      issues: [...listing.issues],
-      versions,
-      complete: !listing.truncated,
-    };
+    return { issues: [...listing.issues], complete: !listing.truncated };
   };
+
+  /** Read the release versions of a project. */
+  const loadVersions = async (projectKey: string): Promise<ProjectVersion[]> =>
+    options.reader.listVersions(projectKey);
 
   /** The part of a tool result that describes the listing it is based on. */
   const listingReport = (
@@ -182,7 +187,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete } = await load(projectKey);
+      const { issues, complete } = await loadIssues(projectKey);
       const findings = findOrphanedIssues(issues, { complete });
       return {
         projectKey,
@@ -203,7 +208,8 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, versions, complete } = await load(projectKey);
+      const { issues, complete } = await loadIssues(projectKey);
+      const versions = await loadVersions(projectKey);
       const findings = findMissingReleaseVersions(issues, versions);
       return {
         projectKey,
@@ -233,7 +239,8 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, versions, complete } = await load(projectKey);
+      const { issues, complete } = await loadIssues(projectKey);
+      const versions = await loadVersions(projectKey);
       const findings = findStaleBlockers(issues, versions, {
         staleDays: args.staleDays ?? options.staleDays,
         maxDepth: options.maxDepth,
@@ -267,7 +274,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete } = await load(projectKey);
+      const { issues, complete } = await loadIssues(projectKey);
       const findings = findBrokenHierarchies(issues, {
         staleDays: options.staleDays,
         maxDepth: args.maxDepth ?? options.maxDepth,
@@ -316,7 +323,8 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, versions, complete } = await load(projectKey);
+      const { issues, complete } = await loadIssues(projectKey);
+      const versions = await loadVersions(projectKey);
       const findings = [
         ...findOrphanedIssues(issues, { complete }),
         ...findMissingReleaseVersions(issues, versions),
