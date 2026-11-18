@@ -97,11 +97,18 @@ function epicLinkKey(value: unknown): string | undefined {
 /**
  * Normalize one REST issue.
  *
+ * The Epic Link field is read from the named field, from the field with the
+ * usual id, and from the field the caller names, because the id is
+ * site-specific.
+ *
  * Returns `undefined` for an issue without a key: without a key it cannot be
  * reported on, and guessing one would produce a finding about an issue that
  * does not exist.
  */
-export function normalizeIssue(raw: unknown): Issue | undefined {
+export function normalizeIssue(
+  raw: unknown,
+  epicLinkField?: string,
+): Issue | undefined {
   if (raw === null || typeof raw !== "object") {
     return undefined;
   }
@@ -120,9 +127,14 @@ export function normalizeIssue(raw: unknown): Issue | undefined {
     ? fields.labels.filter((label): label is string => typeof label === "string")
     : [];
   // Jira Cloud exposes the epic link as a custom field, other installations
-  // expose it under its name. Either one is read.
+  // expose it under its name. The id is site-specific, so the field the
+  // caller names is read first: an operator who names a field means it.
   const epicKey =
-    epicLinkKey(fields.epicLink) ?? epicLinkKey(fields.customfield_10014);
+    (epicLinkField === undefined
+      ? undefined
+      : epicLinkKey((fields as Record<string, unknown>)[epicLinkField])) ??
+    epicLinkKey(fields.epicLink) ??
+    epicLinkKey(fields.customfield_10014);
 
   return {
     key,
@@ -153,13 +165,16 @@ export function normalizeIssue(raw: unknown): Issue | undefined {
 }
 
 /** Normalize a list of REST issues, dropping the ones without a key. */
-export function normalizeIssues(raw: unknown): Issue[] {
+export function normalizeIssues(
+  raw: unknown,
+  epicLinkField?: string,
+): Issue[] {
   if (!Array.isArray(raw)) {
     return [];
   }
   const issues: Issue[] = [];
   for (const entry of raw) {
-    const issue = normalizeIssue(entry);
+    const issue = normalizeIssue(entry, epicLinkField);
     if (issue !== undefined) {
       issues.push(issue);
     }

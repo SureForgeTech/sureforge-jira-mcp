@@ -19,12 +19,15 @@ thresholds that apply to it (`staleDays`, `maxDepth`). The findings are
 ordered worst first.
 
 Every tool result carries `issuesExamined`, the number of issues it looked
-at. A listing reads at most 2000 issues per project; when that cap is
-reached the result also carries `truncated: true`. A parent or epic that is
-not in an incomplete listing is reported as "not found in the listing" rather
-than as a broken hierarchy, and an issue that nothing in an incomplete listing
-points at is reported as an orphan with a lower severity and a hedged
+at. A listing reads at most 2000 issues per project. When the listing may be
+missing issues the result carries `truncated: true`, and `issuesDropped`
+names how many issues the site returned without a key. A parent or epic that
+is not in an incomplete listing is reported as "not found in the listing"
+rather than as a broken hierarchy, and an issue that nothing in an incomplete
+listing points at is reported as an orphan with a lower severity and a hedged
 detail, because a partial listing cannot prove that an issue does not exist.
+When a site refuses the Epic Link field the result carries
+`epicLinkKnown: false`, because the epic relation is then unknown.
 
 ## Configuration
 

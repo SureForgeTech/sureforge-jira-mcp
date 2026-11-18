@@ -277,17 +277,6 @@ export class JiraClient {
       try {
         payload = await this.request(path, search);
       } catch (error) {
-        if (this.searchPath !== undefined) {
-          throw error;
-        }
-        if (isUnknownEndpoint(error)) {
-          // The site does not know the current endpoint: use the earlier
-          // one from here on, and try this page again against it. The page
-          // is not counted twice.
-          this.searchPath = OFFSET_SEARCH_PATH;
-          page -= 1;
-          continue;
-        }
         if (
           isRefusedRequest(error) &&
           !this.epicLinkFieldRefused &&
@@ -300,13 +289,27 @@ export class JiraClient {
           page -= 1;
           continue;
         }
+        if (this.searchPath !== undefined) {
+          throw error;
+        }
+        if (isUnknownEndpoint(error)) {
+          // The site does not know the current endpoint: use the earlier
+          // one from here on, and try this page again against it. The page
+          // is not counted twice.
+          this.searchPath = OFFSET_SEARCH_PATH;
+          page -= 1;
+          continue;
+        }
         throw error;
       }
       this.searchPath = path;
 
       const rawIssues = (payload as { issues?: unknown } | undefined)?.issues;
       const rawCount = Array.isArray(rawIssues) ? rawIssues.length : 0;
-      const pageIssues = normalizeIssues(rawIssues);
+      const pageIssues = normalizeIssues(
+        rawIssues,
+        this.epicLinkFieldRefused ? undefined : this.epicLinkField,
+      );
       dropped += rawCount - pageIssues.length;
 
       const fresh = pageIssues.filter((issue) => !seenKeys.has(issue.key));
@@ -338,9 +341,9 @@ export class JiraClient {
           // hands over an empty page. The listing is incomplete.
           sourceHasMore = false;
           unreadable = true;
-        } else if (fresh.length === 0) {
-          // The site repeats a page. Reading it again would only repeat the
-          // same issues.
+        } else if (pageIssues.length > 0 && fresh.length === 0) {
+          // The site repeats a page: every issue on it was read before.
+          // Reading it again would only repeat the same issues.
           sourceHasMore = false;
           unreadable = true;
         } else {
@@ -361,7 +364,7 @@ export class JiraClient {
               // an empty page, so the listing is incomplete.
               unreadable = true;
             }
-          } else if (fresh.length === 0) {
+          } else if (pageIssues.length > 0 && fresh.length === 0) {
             // The site repeats a page.
             sourceHasMore = false;
             unreadable = true;
@@ -370,8 +373,15 @@ export class JiraClient {
           }
         } else {
           // Without a total, the listing ends when the site returns fewer
-          // issues than were asked for.
-          sourceHasMore = rawCount >= requested;
+          // issues than were asked for. A site that caps the page size
+          // answers fewer issues than were asked for and still has more, so
+          // the listing cannot be called complete.
+          if (rawCount >= requested) {
+            sourceHasMore = true;
+          } else {
+            sourceHasMore = false;
+            unreadable = true;
+          }
         }
         // The offset moves by the number of issues the site returned, not by
         // the number that could be normalized, so the next window does not
@@ -406,6 +416,10 @@ export class JiraClient {
       truncated: stopReason !== "source" || dropped > 0,
       examined: kept.length,
       dropped,
+      // A site that refused the Epic Link field was read without it, so the
+      // epic relation is not known and the findings that depend on the
+      // absence of an epic cannot be stated as fact.
+      epicLinkKnown: !this.epicLinkFieldRefused,
     };
   }
 

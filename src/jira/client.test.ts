@@ -458,6 +458,92 @@ test("the Epic Link field can be named by the configuration", async () => {
   );
 });
 
+test("the value of the configured Epic Link field is read", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      issues: [
+        {
+          key: "EX-1",
+          fields: { customfield_10100: { key: "EX-9" } },
+        },
+      ],
+      isLast: true,
+    }),
+  ]);
+  const jira = new JiraClient({
+    baseUrl: "https://example.atlassian.net",
+    email: "reader@example.com",
+    apiToken: "example-token-value",
+    fetchImpl,
+    epicLinkField: "customfield_10100",
+  });
+
+  const listing = await jira.listIssues("EX");
+  assert.equal(listing.issues[0].epicKey, "EX-9");
+});
+
+test("a site that refuses the Epic Link field says the epic relation is unknown", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({ message: "unknown field" }, 400),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }], isLast: true }),
+  ]);
+
+  const listing = await client(fetchImpl).listIssues("EX");
+  assert.equal(listing.epicLinkKnown, false);
+  assert.equal(listing.issues.length, 1);
+});
+
+test("the refusal is answered on the earlier endpoint as well", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ message: "unknown field" }, 400),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }], total: 1 }),
+  ]);
+
+  const listing = await client(fetchImpl).listIssues("EX");
+  assert.equal(listing.issues.length, 1);
+  assert.equal(listing.epicLinkKnown, false);
+  assert.equal(requests.length, 3);
+});
+
+test("the cursor path keeps reading when a page holds issues without a key", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({
+      issues: Array.from({ length: 100 }, (_, index) => ({
+        id: String(index),
+        fields: {},
+      })),
+      isLast: false,
+      nextPageToken: "second",
+    }),
+    jsonResponse({
+      issues: [{ key: "EX-1", fields: {} }],
+      isLast: true,
+    }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(requests.length, 2, "the second page was read as well");
+  assert.deepEqual(
+    listing.issues.map((issue) => issue.key),
+    ["EX-1"],
+  );
+});
+
+test("the offset path without a total that ends on a short page is incomplete", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }] }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(
+    listing.truncated,
+    true,
+    "a short page without a total cannot prove that the project was read",
+  );
+});
+
 test("the offset moves by the issues the site returned, not by the ones kept", async () => {
   const { fetchImpl, requests } = fakeFetch([
     jsonResponse({ message: "not found" }, 404),
