@@ -68,6 +68,20 @@ test("an issue without a key is dropped", () => {
   assert.equal(normalizeIssue({ key: "", fields: {} }), undefined);
 });
 
+test("the epic link is read from the named field or from the custom field", () => {
+  const named = normalizeIssue({
+    key: "EX-1",
+    fields: { epicLink: { key: "EX-9" } },
+  });
+  assert.equal(named?.epicKey, "EX-9");
+
+  const custom = normalizeIssue({
+    key: "EX-1",
+    fields: { customfield_10014: { key: "EX-9" } },
+  });
+  assert.equal(custom?.epicKey, "EX-9");
+});
+
 test("an issue without fields still normalizes", () => {
   const issue = normalizeIssue({ key: "EX-1" });
   assert.ok(issue);

@@ -16,7 +16,7 @@ import {
   findStaleBlockers,
 } from "./health/rules.js";
 import { summarizeHealth } from "./health/summary.js";
-import type { Finding, Issue, ProjectVersion } from "./jira/types.js";
+import type { Finding, Issue, IssueListing, ProjectVersion } from "./jira/types.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./version.js";
 
 /** The part of the Jira client the server uses. */
@@ -24,7 +24,7 @@ export interface JiraReader {
   listIssues(
     projectKey: string,
     options?: { jql?: string; maxIssues?: number },
-  ): Promise<Issue[]>;
+  ): Promise<IssueListing>;
   listVersions(projectKey: string): Promise<ProjectVersion[]>;
 }
 
@@ -120,11 +120,24 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
 
   const load = async (
     projectKey: string,
-  ): Promise<{ issues: Issue[]; versions: ProjectVersion[] }> => {
-    const issues = await options.reader.listIssues(projectKey);
+  ): Promise<{ issues: Issue[]; versions: ProjectVersion[]; complete: boolean }> => {
+    const listing = await options.reader.listIssues(projectKey);
     const versions = await options.reader.listVersions(projectKey);
-    return { issues, versions };
+    return {
+      issues: [...listing.issues],
+      versions,
+      complete: !listing.truncated,
+    };
   };
+
+  /** The part of a tool result that describes the listing it is based on. */
+  const listingReport = (
+    issues: readonly Issue[],
+    complete: boolean,
+  ): Record<string, unknown> => ({
+    issuesExamined: issues.length,
+    ...(complete ? {} : { truncated: true }),
+  });
 
   const register = <S extends z.ZodRawShape>(
     name: ToolName,
@@ -158,11 +171,12 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues } = await load(projectKey);
+      const { issues, complete } = await load(projectKey);
       const findings = findOrphanedIssues(issues);
       return {
         projectKey,
         count: findings.length,
+        ...listingReport(issues, complete),
         findings: findings.slice(0, args.limit ?? 100),
       };
     },
@@ -178,11 +192,12 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, versions } = await load(projectKey);
+      const { issues, versions, complete } = await load(projectKey);
       const findings = findMissingReleaseVersions(issues, versions);
       return {
         projectKey,
         count: findings.length,
+        ...listingReport(issues, complete),
         findings: findings.slice(0, args.limit ?? 100),
       };
     },
@@ -193,7 +208,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     {
       title: "Find stale blockers",
       description:
-        "Find the open issues that block other issues and have not been updated for longer than the staleness threshold. A blocker of work that already ships is reported as high severity.",
+        "Find the open issues that block other issues and have not been updated for the staleness threshold or longer. A blocker of work that already ships is reported as high severity.",
       inputSchema: toolInput.extend({
         staleDays: z
           .number()
@@ -207,7 +222,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, versions } = await load(projectKey);
+      const { issues, versions, complete } = await load(projectKey);
       const findings = findStaleBlockers(issues, versions, {
         staleDays: args.staleDays ?? options.staleDays,
         maxDepth: options.maxDepth,
@@ -216,6 +231,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
       return {
         projectKey,
         count: findings.length,
+        ...listingReport(issues, complete),
         findings: findings.slice(0, args.limit ?? 100),
       };
     },
@@ -240,15 +256,17 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues } = await load(projectKey);
+      const { issues, complete } = await load(projectKey);
       const findings = findBrokenHierarchies(issues, {
         staleDays: options.staleDays,
         maxDepth: args.maxDepth ?? options.maxDepth,
         now: now(),
+        complete,
       });
       return {
         projectKey,
         count: findings.length,
+        ...listingReport(issues, complete),
         findings: findings.slice(0, args.limit ?? 100),
       };
     },
@@ -287,7 +305,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, versions } = await load(projectKey);
+      const { issues, versions, complete } = await load(projectKey);
       const findings = [
         ...findOrphanedIssues(issues),
         ...findMissingReleaseVersions(issues, versions),
@@ -300,10 +318,16 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           staleDays: options.staleDays,
           maxDepth: args.maxDepth ?? options.maxDepth,
           now: now(),
+          complete,
         }),
       ];
       const summary = summarizeHealth(findings, { limit: args.limit ?? 10 });
-      return { projectKey, generatedAt: now().toISOString(), ...summary };
+      return {
+        projectKey,
+        generatedAt: now().toISOString(),
+        ...listingReport(issues, complete),
+        ...summary,
+      };
     },
   );
 

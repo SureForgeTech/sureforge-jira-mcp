@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  childrenOf,
   daysSince,
   DEFAULT_RULE_OPTIONS,
   findBrokenHierarchies,
@@ -9,6 +8,7 @@ import {
   findOrphanedIssues,
   findStaleBlockers,
   indexByKey,
+  issuesPointingAt,
   type RuleOptions,
 } from "./rules.js";
 import { EXAMPLE_VERSIONS, makeIssue, NOW } from "../testing/fixtures.js";
@@ -54,10 +54,18 @@ test("an issue with an issue link is not orphaned", () => {
   assert.deepEqual(findings, []);
 });
 
-test("an issue that has a child is not orphaned", () => {
+test("an issue with a child is not orphaned", () => {
   const findings = findOrphanedIssues([
     makeIssue({ key: "EX-1" }),
     makeIssue({ key: "EX-2", parentKey: "EX-1" }),
+  ]);
+  assert.deepEqual(findings, []);
+});
+
+test("an epic that a task points at is not orphaned", () => {
+  const findings = findOrphanedIssues([
+    makeIssue({ key: "EX-1", epicKey: "EX-9" }),
+    makeIssue({ key: "EX-9" }),
   ]);
   assert.deepEqual(findings, []);
 });
@@ -352,11 +360,59 @@ test("daysSince counts whole days and refuses an unreadable timestamp", () => {
   assert.equal(daysSince("not-a-date", NOW), undefined);
 });
 
-test("the index and the child map cover every issue", () => {
+test("the index and the pointing map cover every issue", () => {
   const issues = [
     makeIssue({ key: "EX-1", parentKey: "EX-0" }),
+    makeIssue({ key: "EX-2", epicKey: "EX-0" }),
     makeIssue({ key: "EX-0" }),
   ];
-  assert.equal(indexByKey(issues).size, 2);
-  assert.deepEqual(childrenOf(issues).get("EX-0"), ["EX-1"]);
+  assert.equal(indexByKey(issues).size, 3);
+  assert.deepEqual(
+    [...(issuesPointingAt(issues).get("EX-0") ?? [])].sort(),
+    ["EX-1", "EX-2"],
+  );
+});
+
+test("a blocking relation reported from both ends is reported once", () => {
+  const findings = findStaleBlockers(
+    [
+      makeIssue({
+        key: "EX-1",
+        updated: "2026-01-01T00:00:00.000Z",
+        issueLinks: [
+          { type: "Blocks", direction: "outward", targetKey: "EX-2" },
+        ],
+      }),
+      makeIssue({
+        key: "EX-2",
+        issueLinks: [
+          { type: "Blocks", direction: "inward", targetKey: "EX-1" },
+        ],
+      }),
+    ],
+    EXAMPLE_VERSIONS,
+    options,
+  );
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].issueKey, "EX-1");
+  assert.deepEqual(findings[0].relatedKeys, ["EX-2"]);
+});
+
+test("a missing parent in an incomplete listing is reported as low severity", () => {
+  const findings = findBrokenHierarchies(
+    [makeIssue({ key: "EX-1", parentKey: "EX-404" })],
+    { ...options, complete: false },
+  );
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, "low");
+  assert.match(findings[0].detail, /does not cover the whole project/);
+});
+
+test("a missing parent in a complete listing is reported as high severity", () => {
+  const findings = findBrokenHierarchies(
+    [makeIssue({ key: "EX-1", parentKey: "EX-404" })],
+    { ...options, complete: true },
+  );
+  assert.equal(findings[0].severity, "high");
+  assert.match(findings[0].detail, /does not exist/);
 });

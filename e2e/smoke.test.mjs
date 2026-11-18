@@ -175,8 +175,9 @@ test("the built server answers the health tools over stdio", async (t) => {
   assert.equal(mock.seen.authorized, true, "the request carried the credentials");
 });
 
-test("the server refuses to start without a configuration", async () => {
+test("the server refuses to start without a configuration", async (t) => {
   if (!existsSync(serverBuild)) {
+    t.skip(`the server is not built: ${serverBuild} is missing`);
     return;
   }
 

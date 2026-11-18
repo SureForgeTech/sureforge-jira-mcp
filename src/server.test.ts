@@ -22,7 +22,11 @@ const ISSUES: Issue[] = [
 /** A reader that answers from the example fixtures. */
 function reader(overrides?: Partial<JiraReader>): JiraReader {
   return {
-    listIssues: async () => ISSUES,
+    listIssues: async () => ({
+      issues: ISSUES,
+      truncated: false,
+      examined: ISSUES.length,
+    }),
     listVersions: async (): Promise<ProjectVersion[]> => EXAMPLE_VERSIONS,
     ...overrides,
   };
@@ -213,7 +217,10 @@ test("the summary counts every category", async () => {
 
 test("the summary is healthy when there is nothing to report", async () => {
   const { client, close } = await connect(
-    reader({ listIssues: async () => [], listVersions: async () => [] }),
+    reader({
+      listIssues: async () => ({ issues: [], truncated: false, examined: 0 }),
+      listVersions: async () => [],
+    }),
   );
   try {
     const result = await client.callTool({
@@ -226,13 +233,56 @@ test("the summary is healthy when there is nothing to report", async () => {
   }
 });
 
+test("the tools report how many issues they looked at", async () => {
+  const { client, close } = await connect(reader());
+  try {
+    const result = await client.callTool({
+      name: "jira_find_orphaned_issues",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(body.issuesExamined, ISSUES.length);
+    assert.equal(body.truncated, undefined);
+  } finally {
+    await close();
+  }
+});
+
+test("a truncated listing is reported and softens the missing parent finding", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: ISSUES,
+        truncated: true,
+        examined: ISSUES.length,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_broken_hierarchies",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(body.truncated, true);
+    const findings = body.findings as Array<{
+      severity: string;
+      detail: string;
+    }>;
+    assert.equal(findings[0].severity, "low");
+    assert.match(findings[0].detail, /does not cover the whole project/);
+  } finally {
+    await close();
+  }
+});
+
 test("the tools accept another project key", async () => {
   const asked: string[] = [];
   const { client, close } = await connect(
     reader({
       listIssues: async (projectKey: string) => {
         asked.push(projectKey);
-        return [];
+        return { issues: [], truncated: false, examined: 0 };
       },
     }),
   );

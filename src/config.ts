@@ -81,18 +81,19 @@ export function assertUsableBaseUrl(baseUrl: string): string {
 
   return baseUrl.replace(/\/+$/, "");
 }
-function readPositiveInteger(
+function readInteger(
   raw: string | undefined,
   name: string,
   fallback: number,
+  minimum: number,
 ): number {
   if (raw === undefined || raw.trim() === "") {
     return fallback;
   }
   const value = Number(raw);
-  if (!Number.isInteger(value) || value < 0) {
+  if (!Number.isInteger(value) || value < minimum) {
     throw new ConfigError(
-      `${name} must be a whole number that is not negative, not "${raw}".`,
+      `${name} must be a whole number that is not below ${minimum}, not "${raw}".`,
     );
   }
   return value;
@@ -145,12 +146,13 @@ export function loadConfig(env: Environment = process.env): JiraConfig {
     email,
     apiToken,
     projectKey: projectKey.toUpperCase(),
-    staleDays: readPositiveInteger(env.JIRA_STALE_DAYS, "JIRA_STALE_DAYS", DEFAULT_STALE_DAYS),
-    maxDepth: readPositiveInteger(env.JIRA_MAX_DEPTH, "JIRA_MAX_DEPTH", DEFAULT_MAX_DEPTH),
-    timeoutMs: readPositiveInteger(
+    staleDays: readInteger(env.JIRA_STALE_DAYS, "JIRA_STALE_DAYS", DEFAULT_STALE_DAYS, 0),
+    maxDepth: readInteger(env.JIRA_MAX_DEPTH, "JIRA_MAX_DEPTH", DEFAULT_MAX_DEPTH, 1),
+    timeoutMs: readInteger(
       env.JIRA_TIMEOUT_MS,
       "JIRA_TIMEOUT_MS",
       DEFAULT_TIMEOUT_MS,
+      1,
     ),
   };
 }

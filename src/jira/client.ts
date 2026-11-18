@@ -7,7 +7,7 @@
  * mock instead of a live Jira.
  */
 import { normalizeIssues, normalizeVersions } from "./normalize.js";
-import type { Issue, ProjectVersion } from "./types.js";
+import type { Issue, IssueListing, ProjectVersion } from "./types.js";
 
 /** An error raised by the Jira API or by the transport around it. */
 export class JiraError extends Error {
@@ -35,7 +35,7 @@ export interface JiraClientOptions {
   readonly fetchImpl?: typeof fetch;
   /** The request timeout in milliseconds; defaults to 15000. */
   readonly timeoutMs?: number;
-  /** The largest number of issues one listing may return; defaults to 500. */
+  /** The largest number of issues one listing may return; defaults to 2000. */
   readonly maxIssues?: number;
 }
 
@@ -55,13 +55,31 @@ const ISSUE_FIELDS = [
   "duedate",
   "project",
   "epicLink",
+  // Jira Cloud exposes the epic link as a custom field; the named field is
+  // read as well, so a project that uses either one is covered.
+  "customfield_10014",
 ].join(",");
 
 /** The number of issues one search page may return. */
 const PAGE_SIZE = 100;
 
 /** The largest number of pages one listing may read. */
-const MAX_PAGES = 20;
+const MAX_PAGES = 50;
+
+/** The default cap on the issues one listing may return. */
+export const DEFAULT_MAX_ISSUES = 2000;
+
+/**
+ * The search endpoints.
+ *
+ * The current endpoint pages by cursor (`nextPageToken`), the earlier one by
+ * offset (`startAt`). The current endpoint is tried first; a site that does
+ * not know it answers 404, and a site that has retired it answers 410. The
+ * endpoint that worked is remembered, so only the first page costs a second
+ * request.
+ */
+const CURSOR_SEARCH_PATH = "/rest/api/3/search/jql";
+const OFFSET_SEARCH_PATH = "/rest/api/3/search";
 
 /**
  * Normalize a configured base URL.
@@ -88,6 +106,13 @@ export function buildProjectJql(projectKey: string, extra?: string): string {
   return filter ? `${project} AND (${filter})` : project;
 }
 
+/** Whether a status means the site does not know the endpoint. */
+function isUnknownEndpoint(error: unknown): boolean {
+  return (
+    error instanceof JiraError && (error.status === 404 || error.status === 410)
+  );
+}
+
 export class JiraClient {
   readonly baseUrl: string;
   private readonly email: string;
@@ -95,6 +120,8 @@ export class JiraClient {
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
   private readonly maxIssues: number;
+  /** The search endpoint that worked, remembered after the first page. */
+  private searchPath?: string;
 
   constructor(options: JiraClientOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
@@ -102,7 +129,7 @@ export class JiraClient {
     this.apiToken = options.apiToken;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? 15000;
-    this.maxIssues = options.maxIssues ?? 500;
+    this.maxIssues = options.maxIssues ?? DEFAULT_MAX_ISSUES;
   }
 
   /** The authorization header. The token never leaves this method. */
@@ -162,59 +189,95 @@ export class JiraClient {
   /**
    * List the issues of a project.
    *
-   * The search endpoint moved during 2025: the current one is
-   * `/rest/api/3/search/jql` and the earlier one is `/rest/api/3/search`.
-   * The current endpoint is tried first and the earlier one is used when the
-   * site answers 404, so the server works on both.
+   * The listing reads every page the site offers, up to the issue cap. When
+   * the cap is reached the listing is marked as truncated, because the
+   * project was then not covered completely.
    */
   async listIssues(
     projectKey: string,
     options?: { jql?: string; maxIssues?: number },
-  ): Promise<Issue[]> {
+  ): Promise<IssueListing> {
     const jql = buildProjectJql(projectKey, options?.jql);
     const limit = Math.min(options?.maxIssues ?? this.maxIssues, this.maxIssues);
 
     const issues: Issue[] = [];
+    let nextPageToken: string | undefined;
     let startAt = 0;
+    let exhausted = false;
 
-    for (let page = 0; page < MAX_PAGES; page += 1) {
+    for (let page = 0; page < MAX_PAGES && !exhausted; page += 1) {
       const search = new URLSearchParams({
         jql,
         maxResults: String(Math.min(PAGE_SIZE, limit - issues.length)),
-        startAt: String(startAt),
         fields: ISSUE_FIELDS,
       });
 
-      const payload = await this.searchPage(search);
+      const path = this.searchPath ?? CURSOR_SEARCH_PATH;
+      if (path === OFFSET_SEARCH_PATH) {
+        search.set("startAt", String(startAt));
+      } else if (nextPageToken !== undefined) {
+        search.set("nextPageToken", nextPageToken);
+      }
+
+      let payload: unknown;
+      try {
+        payload = await this.request(path, search);
+      } catch (error) {
+        if (this.searchPath !== undefined || !isUnknownEndpoint(error)) {
+          throw error;
+        }
+        // The site does not know the current endpoint: use the earlier one
+        // from here on, and try this page again against it.
+        this.searchPath = OFFSET_SEARCH_PATH;
+        continue;
+      }
+      this.searchPath = path;
+
       const pageIssues = normalizeIssues(
         (payload as { issues?: unknown } | undefined)?.issues,
       );
       issues.push(...pageIssues);
 
-      if (pageIssues.length < PAGE_SIZE || issues.length >= limit) {
-        break;
+      const pagePayload = payload as
+        | { isLast?: unknown; nextPageToken?: unknown; total?: unknown }
+        | undefined;
+
+      if (path === CURSOR_SEARCH_PATH) {
+        const isLast = pagePayload?.isLast === true;
+        const token =
+          typeof pagePayload?.nextPageToken === "string"
+            ? pagePayload.nextPageToken
+            : undefined;
+        if (isLast || token === undefined || pageIssues.length === 0) {
+          exhausted = true;
+          continue;
+        }
+        nextPageToken = token;
+      } else {
+        const total =
+          typeof pagePayload?.total === "number" ? pagePayload.total : undefined;
+        if (pageIssues.length < PAGE_SIZE) {
+          exhausted = true;
+          continue;
+        }
+        if (total !== undefined && startAt + pageIssues.length >= total) {
+          exhausted = true;
+          continue;
+        }
+        startAt += pageIssues.length;
       }
-      startAt += pageIssues.length;
+
+      if (issues.length >= limit) {
+        exhausted = true;
+      }
     }
 
-    return issues.slice(0, limit);
-  }
-
-  /**
-   * Run one search page against the search endpoint, falling back to the
-   * earlier endpoint when the site does not know the current one.
-   */
-  private async searchPage(search: URLSearchParams): Promise<unknown> {
-    try {
-      return await this.request("/rest/api/3/search/jql", search);
-    } catch (error) {
-      const isNotFound =
-        error instanceof JiraError && error.status === 404;
-      if (!isNotFound) {
-        throw error;
-      }
-      return this.request("/rest/api/3/search", search);
-    }
+    const kept = issues.slice(0, limit);
+    return {
+      issues: kept,
+      truncated: kept.length >= limit,
+      examined: kept.length,
+    };
   }
 
   /** List the release versions of a project. */

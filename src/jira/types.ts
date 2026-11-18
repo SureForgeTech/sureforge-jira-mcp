@@ -67,6 +67,22 @@ export interface ProjectVersion {
   readonly archived: boolean;
 }
 
+/** The issues of a project, and whether the listing covers the whole project. */
+export interface IssueListing {
+  /** The issues that were read. */
+  readonly issues: readonly Issue[];
+  /**
+   * Whether the listing stopped at the issue cap.
+   *
+   * A truncated listing does not cover the whole project, so an issue that is
+   * not in it may still exist somewhere else. The findings that depend on the
+   * absence of an issue are reported differently when it is truncated.
+   */
+  readonly truncated: boolean;
+  /** The number of issues that were read. */
+  readonly examined: number;
+}
+
 /** The categories of finding the health rules produce. */
 export type FindingCategory =
   | "orphaned-issue"

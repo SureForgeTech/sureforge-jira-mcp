@@ -54,6 +54,17 @@ function client(fetchImpl: typeof fetch, maxIssues = 500): JiraClient {
   });
 }
 
+/** A page of `count` issues. */
+function pageOfIssues(count: number, offset = 0): Array<{
+  key: string;
+  fields: Record<string, never>;
+}> {
+  return Array.from({ length: count }, (_, index) => ({
+    key: `EX-${offset + index}`,
+    fields: {},
+  }));
+}
+
 test("the base URL loses a trailing slash and a REST suffix", () => {
   assert.equal(
     normalizeBaseUrl("https://example.atlassian.net/"),
@@ -79,22 +90,23 @@ test("the project JQL quotes the key and keeps an extra filter", () => {
 
 test("listing issues asks the search endpoint for the project", async () => {
   const { fetchImpl, requests } = fakeFetch([
-    jsonResponse({ issues: [{ key: "EX-1", fields: {} }] }),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }], isLast: true }),
   ]);
-  const issues = await client(fetchImpl).listIssues("EX");
+  const listing = await client(fetchImpl).listIssues("EX");
 
-  assert.equal(issues.length, 1);
-  assert.equal(issues[0].key, "EX-1");
+  assert.equal(listing.issues.length, 1);
+  assert.equal(listing.issues[0].key, "EX-1");
+  assert.equal(listing.truncated, false);
+  assert.equal(listing.examined, 1);
   assert.equal(requests.length, 1);
-  assert.equal(
-    requests[0].url.pathname,
-    "/rest/api/3/search/jql",
-  );
+  assert.equal(requests[0].url.pathname, "/rest/api/3/search/jql");
   assert.equal(requests[0].url.searchParams.get("jql"), 'project = "EX"');
 });
 
 test("the request carries the basic authorization header", async () => {
-  const { fetchImpl, requests } = fakeFetch([jsonResponse({ issues: [] })]);
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ issues: [], isLast: true }),
+  ]);
   await client(fetchImpl).listIssues("EX");
 
   const authorization = requests[0].authorization;
@@ -107,49 +119,91 @@ test("the request carries the basic authorization header", async () => {
   assert.equal(decoded, "reader@example.com:example-token-value");
 });
 
-test("listing issues reads every page", async () => {
-  const first = Array.from({ length: 100 }, (_, index) => ({
-    key: `EX-${index}`,
-    fields: {},
-  }));
-  const second = [{ key: "EX-100", fields: {} }];
+test("the cursor endpoint is read page by page with its token", async () => {
   const { fetchImpl, requests } = fakeFetch([
-    jsonResponse({ issues: first }),
-    jsonResponse({ issues: second }),
+    jsonResponse({
+      issues: pageOfIssues(100),
+      isLast: false,
+      nextPageToken: "token-of-the-second-page",
+    }),
+    jsonResponse({ issues: pageOfIssues(1, 100), isLast: true }),
   ]);
 
-  const issues = await client(fetchImpl).listIssues("EX");
-  assert.equal(issues.length, 101);
+  const listing = await client(fetchImpl).listIssues("EX");
+  assert.equal(listing.issues.length, 101);
   assert.equal(requests.length, 2);
-  assert.equal(requests[1].url.searchParams.get("startAt"), "100");
-});
-
-test("listing issues stops at the configured limit", async () => {
-  const page = Array.from({ length: 100 }, (_, index) => ({
-    key: `EX-${index}`,
-    fields: {},
-  }));
-  const { fetchImpl, requests } = fakeFetch([
-    jsonResponse({ issues: page }),
-    jsonResponse({ issues: page }),
-  ]);
-
-  const issues = await client(fetchImpl, 150).listIssues("EX");
-  assert.equal(issues.length, 150);
-  assert.equal(requests.length, 2);
+  assert.equal(
+    requests[0].url.searchParams.get("nextPageToken"),
+    null,
+    "the first page has no token",
+  );
+  assert.equal(
+    requests[1].url.searchParams.get("nextPageToken"),
+    "token-of-the-second-page",
+  );
+  assert.equal(
+    requests[1].url.searchParams.get("startAt"),
+    null,
+    "the cursor endpoint is not asked for an offset",
+  );
 });
 
 test("the earlier search endpoint is used when the site does not know the current one", async () => {
   const { fetchImpl, requests } = fakeFetch([
     jsonResponse({ message: "not found" }, 404),
-    jsonResponse({ issues: [{ key: "EX-1", fields: {} }] }),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }], total: 1 }),
   ]);
 
-  const issues = await client(fetchImpl).listIssues("EX");
-  assert.equal(issues.length, 1);
+  const listing = await client(fetchImpl).listIssues("EX");
+  assert.equal(listing.issues.length, 1);
   assert.equal(requests.length, 2);
   assert.equal(requests[0].url.pathname, "/rest/api/3/search/jql");
   assert.equal(requests[1].url.pathname, "/rest/api/3/search");
+});
+
+test("a retired endpoint also falls back to the earlier one", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "gone" }, 410),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }], total: 1 }),
+  ]);
+
+  const listing = await client(fetchImpl).listIssues("EX");
+  assert.equal(listing.issues.length, 1);
+  assert.equal(requests[1].url.pathname, "/rest/api/3/search");
+});
+
+test("the endpoint that worked is remembered, so later pages cost one request", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ issues: pageOfIssues(100), total: 200 }),
+    jsonResponse({ issues: pageOfIssues(100, 100), total: 200 }),
+  ]);
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(listing.issues.length, 200);
+  assert.equal(requests.length, 3);
+  assert.equal(requests[2].url.pathname, "/rest/api/3/search");
+  assert.equal(requests[2].url.searchParams.get("startAt"), "100");
+});
+
+test("a listing that reaches the cap is marked as truncated", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      issues: pageOfIssues(100),
+      isLast: false,
+      nextPageToken: "more",
+    }),
+    jsonResponse({
+      issues: pageOfIssues(100, 100),
+      isLast: false,
+      nextPageToken: "more",
+    }),
+  ]);
+
+  const listing = await client(fetchImpl, 150).listIssues("EX");
+  assert.equal(listing.issues.length, 150);
+  assert.equal(listing.truncated, true);
+  assert.equal(listing.examined, 150);
 });
 
 test("an error from Jira is reported with its status", async () => {
@@ -157,7 +211,9 @@ test("an error from Jira is reported with its status", async () => {
   await assert.rejects(
     () => client(fetchImpl).listIssues("EX"),
     (error: unknown) =>
-      error instanceof JiraError && error.status === 401 && /401/.test(error.message),
+      error instanceof JiraError &&
+      error.status === 401 &&
+      /401/.test(error.message),
   );
 });
 

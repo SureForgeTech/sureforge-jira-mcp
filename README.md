@@ -10,13 +10,20 @@ The server only reads. It never changes an issue, and it never writes to Jira.
 | --- | --- |
 | `jira_find_orphaned_issues` | Open issues that stand on their own: no parent, no epic, no link to another issue, and nothing pointing at them. |
 | `jira_find_missing_release_versions` | Issues whose release version is missing or wrong: an issue names a version the project does not have, or an issue ships in a release while its parent carries no version. |
-| `jira_find_stale_blockers` | Open issues that block other issues and have not been updated for longer than the staleness threshold. A blocker of work that already ships is reported as high severity. |
+| `jira_find_stale_blockers` | Open issues that block other issues and have not been updated for the staleness threshold or longer. A blocker of work that already ships is reported as high severity. |
 | `jira_find_broken_hierarchies` | Broken issue hierarchies: a parent or epic that does not exist, a parent chain that loops, and a hierarchy deeper than the depth limit. |
 | `jira_health_summary` | The aggregate view: the number of findings per category and severity, the findings to look at first, and a status of `healthy` or `needs-attention`. |
 
 Every tool takes an optional `projectKey`, an optional `limit`, and the
 thresholds that apply to it (`staleDays`, `maxDepth`). The findings are
 ordered worst first.
+
+Every tool result carries `issuesExamined`, the number of issues it looked
+at. A listing reads at most 2000 issues per project; when that cap is
+reached the result also carries `truncated: true`, and a parent or epic that
+is not in the listing is reported as "not found in the listing" rather than as
+a broken hierarchy, because a partial listing cannot prove that an issue does
+not exist.
 
 ## Configuration
 

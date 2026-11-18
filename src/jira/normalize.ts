@@ -19,6 +19,7 @@ interface RawIssue {
     resolution?: { name?: unknown } | null;
     parent?: { key?: unknown } | null;
     epicLink?: { key?: unknown } | null;
+    customfield_10014?: { key?: unknown } | null;
     fixVersions?: Array<{ name?: unknown }>;
     labels?: unknown;
     created?: unknown;
@@ -101,6 +102,9 @@ export function normalizeIssue(raw: unknown): Issue | undefined {
   const labels = Array.isArray(fields.labels)
     ? fields.labels.filter((label): label is string => typeof label === "string")
     : [];
+  // Jira Cloud exposes the epic link as a custom field, other installations
+  // expose it under its name. Either one is read.
+  const epicKey = text(fields.epicLink?.key) ?? text(fields.customfield_10014?.key);
 
   return {
     key,
@@ -114,9 +118,7 @@ export function normalizeIssue(raw: unknown): Issue | undefined {
     ...(text(fields.parent?.key) === undefined
       ? {}
       : { parentKey: text(fields.parent?.key) }),
-    ...(text(fields.epicLink?.key) === undefined
-      ? {}
-      : { epicKey: text(fields.epicLink?.key) }),
+    ...(epicKey === undefined ? {} : { epicKey }),
     fixVersions,
     labels,
     created: text(fields.created) ?? "",

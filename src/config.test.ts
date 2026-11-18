@@ -71,6 +71,21 @@ test("a value that is not a whole number is refused", () => {
   );
 });
 
+test("a threshold of zero is refused where it makes no sense", () => {
+  assert.throws(
+    () => loadConfig({ ...completeEnv, JIRA_MAX_DEPTH: "0" }),
+    ConfigError,
+  );
+  assert.throws(
+    () => loadConfig({ ...completeEnv, JIRA_TIMEOUT_MS: "0" }),
+    ConfigError,
+  );
+});
+
+test("a staleness of zero days is allowed", () => {
+  assert.equal(loadConfig({ ...completeEnv, JIRA_STALE_DAYS: "0" }).staleDays, 0);
+});
+
 test("a base URL that is not a URL is refused", () => {
   assert.throws(
     () => loadConfig({ ...completeEnv, JIRA_BASE_URL: "example.atlassian.net" }),
