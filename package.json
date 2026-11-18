@@ -1,0 +1,52 @@
+{
+  "name": "sureforge-jira-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Jira health: finds orphaned issues, missing release versions, stale blockers and broken hierarchies.",
+  "license": "Apache-2.0",
+  "author": "SureForgeTech",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SureForgeTech/sureforge-jira-mcp.git"
+  },
+  "homepage": "https://github.com/SureForgeTech/sureforge-jira-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/SureForgeTech/sureforge-jira-mcp/issues"
+  },
+  "keywords": [
+    "jira",
+    "mcp",
+    "model-context-protocol"
+  ],
+  "type": "module",
+  "bin": {
+    "sureforge-jira-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "build:test": "npm run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build:test && node scripts/run-tests.mjs dist",
+    "e2e": "node scripts/run-tests.mjs e2e",
+    "check": "npm run typecheck && npm run build && npm test && npm run e2e",
+    "start": "node ./dist/index.js",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  }
+}
