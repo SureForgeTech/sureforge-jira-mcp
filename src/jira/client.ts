@@ -77,15 +77,26 @@ const BASE_ISSUE_FIELDS = [
  * the rules.
  */
 export function issueFields(epicLinkField?: string): string {
+  const field = effectiveEpicLinkField(epicLinkField);
+  return field === undefined
+    ? BASE_ISSUE_FIELDS.join(",")
+    : [...BASE_ISSUE_FIELDS, field].join(",");
+}
+
+/**
+ * The Epic Link field the connector actually uses.
+ *
+ * An id that names a field the server always asks for is ignored: it
+ * cannot be the epic link, and reading it would put a wrong relation into
+ * the rules. The same id has to be ignored when the issues are read, not
+ * only when the request is built.
+ */
+export function effectiveEpicLinkField(epicLinkField?: string): string | undefined {
   const field = epicLinkField?.trim();
-  if (
-    field === undefined ||
-    field === "" ||
-    BASE_ISSUE_FIELDS.includes(field)
-  ) {
-    return BASE_ISSUE_FIELDS.join(",");
+  if (field === undefined || field === "" || BASE_ISSUE_FIELDS.includes(field)) {
+    return undefined;
   }
-  return [...BASE_ISSUE_FIELDS, field].join(",");
+  return field;
 }
 
 /** The number of issues one search page may return. */
@@ -319,7 +330,7 @@ export class JiraClient {
       const rawCount = Array.isArray(rawIssues) ? rawIssues.length : 0;
       const pageIssues = normalizeIssues(
         rawIssues,
-        epicLinkFieldRefused ? undefined : this.epicLinkField,
+        epicLinkFieldRefused ? undefined : effectiveEpicLinkField(this.epicLinkField),
       );
       dropped += rawCount - pageIssues.length;
 

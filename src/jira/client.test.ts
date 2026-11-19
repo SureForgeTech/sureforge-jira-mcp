@@ -724,3 +724,28 @@ test("an unrelated 400 does not blame the Epic Link field", async () => {
     "the next listing still asks for the Epic Link field",
   );
 });
+
+test("a field id that names a field the server always asks for is not read as the epic link", async () => {
+  // The id is ignored in the request, so it must be ignored in the reading
+  // too: otherwise the value of that field would become the epic relation
+  // and every issue would look like it had an epic.
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      issues: [
+        { key: "EX-1", fields: { project: { key: "EX" }, summary: "Example issue" } },
+      ],
+      isLast: true,
+    }),
+  ]);
+
+  const site = new JiraClient({
+    baseUrl: "https://example.atlassian.net",
+    email: "reader@example.com",
+    apiToken: "example-token-value",
+    fetchImpl,
+    epicLinkField: "project",
+  });
+  const listing = await site.listIssues("EX");
+  assert.equal(listing.epicLinkKnown, true);
+  assert.equal(listing.issues[0]?.epicKey, undefined);
+});

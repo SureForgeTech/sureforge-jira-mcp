@@ -85,8 +85,8 @@ export interface IssueListing {
   /** The number of issues that were read. */
   readonly examined: number;
   /**
-   * The number of issues the site returned that carried no key and were
-   * therefore left out.
+   * The number of issues the listing left out: the ones the site returned
+   * that carried no key, and the ones the issue cap cut off.
    *
    * Such an issue may point at another one, so a listing that left any out
    * does not cover the whole project either.
