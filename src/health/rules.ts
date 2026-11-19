@@ -181,9 +181,8 @@ function orphanDetail(
   } else {
     // An epic's children point at the issue through the link that was not
     // read, so even the listing cannot be said to point at nothing.
-    pointing = listingComplete
-      ? "and whether any issue points at it is unknown, because the epic relation could not be read."
-      : "and whether any issue points at it is unknown, because the epic relation could not be read and the listing does not cover the whole project.";
+    pointing =
+      "and whether any issue points at it is unknown, because the epic relation could not be read and the listing does not cover the whole project.";
   }
   const sentences = [`${subject}, ${pointing}`];
   if (!epicLinkKnown) {

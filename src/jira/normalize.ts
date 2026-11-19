@@ -93,14 +93,14 @@ function readIssueLinks(raw: unknown): IssueLink[] {
  * itself, depending on the site, and both are read.
  */
 /**
- * The epic key a field holds, when it names an issue of the same project.
+ * The epic key a field holds, when it names an issue.
  *
- * The value of an epic link field is the key of the epic, in the same
- * project as the issue that holds it. A value that does not look like one
- * - a team name, a label - is not a relation, and reading it as one would
- * report an epic that does not exist.
+ * The value of an epic link field is the key of the epic. A value that
+ * does not have the shape of an issue key - a team name, a label - is not
+ * a relation, and reading it as one would report an epic that does not
+ * exist.
  */
-function epicLinkKey(value: unknown, issueKey: string): string | undefined {
+function epicLinkKey(value: unknown): string | undefined {
   const candidate =
     typeof value === "string"
       ? text(value)
@@ -117,6 +117,43 @@ function epicLinkKey(value: unknown, issueKey: string): string | undefined {
     return undefined;
   }
   return candidate;
+}
+
+/**
+ * Whether a field holds a value that cannot be an epic relation.
+ *
+ * A field that holds free text - a team name, say - is not an epic link,
+ * so the epic relation was not read even though the site answered. The
+ * listing says so, and the findings that depend on it are hedged.
+ */
+export function hasUnusableEpicValue(
+  fields: unknown,
+  epicLinkField?: string,
+): boolean {
+  if (fields === null || typeof fields !== "object") {
+    return false;
+  }
+  const record = fields as Record<string, unknown>;
+  const sources = [
+    epicLinkField === undefined ? undefined : record[epicLinkField],
+    record.epicLink,
+    record.customfield_10014,
+  ];
+  return sources.some((source) => {
+    if (source === undefined || source === null) {
+      return false;
+    }
+    const value =
+      typeof source === "string"
+        ? source
+        : typeof source === "object"
+          ? (source as { key?: unknown }).key
+          : undefined;
+    if (typeof value !== "string" || value.length === 0) {
+      return false;
+    }
+    return !ISSUE_KEY_PATTERN.test(value);
+  });
 }
 
 /**
@@ -155,15 +192,15 @@ export function normalizeIssue(
   // expose it under its name. The id is site-specific, so the field the
   // caller names is read first: an operator who names a field means it.
   //
-  // A value only names an epic when it looks like an issue key of the same
-  // project: a field that holds free text - a team name, say - would
-  // otherwise put a relation into the findings that no issue has.
+  // A value only names an epic when it has the shape of an issue key: a
+  // field that holds free text - a team name, say - would otherwise put a
+  // relation into the findings that no issue has.
   const epicKey =
     (epicLinkField === undefined
       ? undefined
-      : epicLinkKey((fields as Record<string, unknown>)[epicLinkField], key)) ??
-    epicLinkKey(fields.epicLink, key) ??
-    epicLinkKey(fields.customfield_10014, key);
+      : epicLinkKey((fields as Record<string, unknown>)[epicLinkField])) ??
+    epicLinkKey(fields.epicLink) ??
+    epicLinkKey(fields.customfield_10014);
 
   return {
     key,

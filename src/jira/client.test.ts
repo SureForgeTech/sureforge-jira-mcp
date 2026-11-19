@@ -815,3 +815,47 @@ test("a field that holds free text is not read as the epic link", async () => {
   const listing = await site.listIssues("EX");
   assert.equal(listing.issues[0]?.epicKey, undefined);
 });
+
+test("a field whose value cannot be an epic leaves the relation unknown", async () => {
+  // The site answered, but the field holds a value that is not an issue
+  // key. The relation was not read, so the listing says so - and the
+  // findings that depend on it are hedged instead of stating that the
+  // issue has no epic.
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      issues: [
+        { key: "EX-1", fields: { customfield_10016: "Team A", summary: "Example issue" } },
+      ],
+      isLast: true,
+    }),
+  ]);
+
+  const site = new JiraClient({
+    baseUrl: "https://example.atlassian.net",
+    email: "reader@example.com",
+    apiToken: "example-token-value",
+    fetchImpl,
+    epicLinkField: "customfield_10016",
+  });
+  const listing = await site.listIssues("EX");
+  assert.equal(listing.issues[0]?.epicKey, undefined);
+  assert.equal(listing.epicLinkKnown, false);
+});
+
+test("an issue repeated within one page is counted once", async () => {
+  // The site's page holds the same issue twice. It is one issue, and the
+  // listing reports it once.
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      issues: [
+        { key: "EX-1", fields: { summary: "Example issue" } },
+        { key: "EX-1", fields: { summary: "Example issue" } },
+      ],
+      isLast: true,
+    }),
+  ]);
+
+  const listing = await client(fetchImpl).listIssues("EX");
+  assert.equal(listing.issues.length, 1);
+  assert.equal(listing.examined, 1);
+});

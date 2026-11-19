@@ -6,7 +6,11 @@
  * drive the real request-building and response-handling code against a local
  * mock instead of a live Jira.
  */
-import { normalizeIssues, normalizeVersions } from "./normalize.js";
+import {
+  hasUnusableEpicValue,
+  normalizeIssues,
+  normalizeVersions,
+} from "./normalize.js";
 import type { Issue, IssueListing, ProjectVersion } from "./types.js";
 
 /** An error raised by the Jira API or by the transport around it. */
@@ -257,6 +261,9 @@ export class JiraClient {
     // Whether this listing was refused the Epic Link field. It is per
     // listing: one refused request must not soften every later listing.
     let epicLinkFieldRefused = false;
+    // A field that holds a value which is not an issue key means the epic
+    // relation was not read.
+    let epicValueUnreadable = false;
     let nextPageToken: string | undefined;
     let startAt = 0;
     /**
@@ -301,11 +308,7 @@ export class JiraClient {
       try {
         payload = await this.request(path, search);
       } catch (error) {
-        if (
-          isRefusedRequest(error) &&
-          !epicLinkFieldRefused &&
-          this.epicLinkField !== ""
-        ) {
+        if (isRefusedRequest(error) && !epicLinkFieldRefused) {
           // The site refused the request, most likely because of the Epic
           // Link field. Read the same page without it: if that works, the
           // field was the problem, the epic link is then not known, and
@@ -333,13 +336,32 @@ export class JiraClient {
 
       const rawIssues = (payload as { issues?: unknown } | undefined)?.issues;
       const rawCount = Array.isArray(rawIssues) ? rawIssues.length : 0;
+      // A field that holds a value which cannot be an epic relation means
+      // the relation was not read, even though the site answered.
+      if (
+        hasUnusableEpicValue(
+          (rawIssues as Array<{ fields?: unknown }> | undefined)?.[0]?.fields,
+          epicLinkFieldRefused ? undefined : effectiveEpicLinkField(this.epicLinkField),
+        )
+      ) {
+        epicValueUnreadable = true;
+      }
       const pageIssues = normalizeIssues(
         rawIssues,
         epicLinkFieldRefused ? undefined : effectiveEpicLinkField(this.epicLinkField),
       );
       dropped += rawCount - pageIssues.length;
 
-      const fresh = pageIssues.filter((issue) => !seenKeys.has(issue.key));
+      // An issue repeated within one page is one issue: the page's own
+      // keys are not in the set yet.
+      const seenOnPage = new Set<string>();
+      const fresh = pageIssues.filter((issue) => {
+        if (seenKeys.has(issue.key) || seenOnPage.has(issue.key)) {
+          return false;
+        }
+        seenOnPage.add(issue.key);
+        return true;
+      });
       for (const issue of fresh) {
         seenKeys.add(issue.key);
       }
@@ -455,7 +477,7 @@ export class JiraClient {
       // A site that refused the Epic Link field was read without it, so the
       // epic relation is not known and the findings that depend on the
       // absence of an epic cannot be stated as fact.
-      epicLinkKnown: !epicLinkFieldRefused,
+      epicLinkKnown: !epicLinkFieldRefused && !epicValueUnreadable,
     };
   }
 
