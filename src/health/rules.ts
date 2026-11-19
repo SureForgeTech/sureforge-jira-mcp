@@ -179,8 +179,11 @@ function orphanDetail(
     pointing =
       "and whether any issue points at it is unknown, because the epic relation could not be read.";
   } else {
-    pointing =
-      `and no issue in the listing of ${examined} issues points at it, but whether any issue points at it is unknown, because the epic relation could not be read.`;
+    // An epic's children point at the issue through the link that was not
+    // read, so even the listing cannot be said to point at nothing.
+    pointing = listingComplete
+      ? "and whether any issue points at it is unknown, because the epic relation could not be read."
+      : "and whether any issue points at it is unknown, because the epic relation could not be read and the listing does not cover the whole project.";
   }
   const sentences = [`${subject}, ${pointing}`];
   if (!epicLinkKnown) {
@@ -328,8 +331,14 @@ export function findStaleBlockers(
  * than the depth limit. A cycle is reported once, not once per issue in it.
  *
  * When the listing of the project is not complete, an issue that is not in
- * it may still exist, so a missing parent or epic is reported as "not found
- * in the listing" and with a lower severity.
+ * it may still exist, so a missing parent is reported as "not found in the
+ * listing" and with a lower severity.
+ *
+ * A missing epic also depends on the epic relation, which the site may
+ * have refused to answer: an epic that could not be read is reported as
+ * not found, and with a lower severity, even in a complete listing. A
+ * missing parent does not: the listing alone proves it, so a complete
+ * listing reports it as broken whatever the epic relation says.
  */
 export function findBrokenHierarchies(
   issues: readonly Issue[],

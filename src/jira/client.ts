@@ -77,7 +77,11 @@ const BASE_ISSUE_FIELDS = [
  * the rules.
  */
 export function issueFields(epicLinkField?: string): string {
-  const field = effectiveEpicLinkField(epicLinkField);
+  // An undefined id means the site refused the field: it is not asked for
+  // again. A named id that cannot be the epic link falls back to the
+  // documented default, so the epic relation is still read.
+  const field =
+    epicLinkField === undefined ? undefined : effectiveEpicLinkField(epicLinkField);
   return field === undefined
     ? BASE_ISSUE_FIELDS.join(",")
     : [...BASE_ISSUE_FIELDS, field].join(",");
@@ -88,13 +92,14 @@ export function issueFields(epicLinkField?: string): string {
  *
  * An id that names a field the server always asks for is ignored: it
  * cannot be the epic link, and reading it would put a wrong relation into
- * the rules. The same id has to be ignored when the issues are read, not
- * only when the request is built.
+ * the rules. The documented default is used instead, so the epic relation
+ * is still read - and still reported as known. The same id has to be
+ * ignored when the issues are read, not only when the request is built.
  */
-export function effectiveEpicLinkField(epicLinkField?: string): string | undefined {
+export function effectiveEpicLinkField(epicLinkField?: string): string {
   const field = epicLinkField?.trim();
   if (field === undefined || field === "" || BASE_ISSUE_FIELDS.includes(field)) {
-    return undefined;
+    return DEFAULT_EPIC_LINK_FIELD;
   }
   return field;
 }

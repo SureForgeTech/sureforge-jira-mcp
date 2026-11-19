@@ -749,3 +749,30 @@ test("a field id that names a field the server always asks for is not read as th
   assert.equal(listing.epicLinkKnown, true);
   assert.equal(listing.issues[0]?.epicKey, undefined);
 });
+
+test("a field id that names a base field falls back to the documented default", async () => {
+  // The named id is ignored, but the epic relation is still read: the
+  // default is asked for, so the listing can say the relation is known
+  // because it is.
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({
+      issues: [{ key: "EX-1", fields: { customfield_10014: "EX-9" } }],
+      isLast: true,
+    }),
+  ]);
+
+  const site = new JiraClient({
+    baseUrl: "https://example.atlassian.net",
+    email: "reader@example.com",
+    apiToken: "example-token-value",
+    fetchImpl,
+    epicLinkField: "project",
+  });
+  const listing = await site.listIssues("EX");
+  assert.ok(
+    requests[0]?.url.searchParams.get("fields")?.includes("customfield_10014"),
+    "the default epic field is asked for",
+  );
+  assert.equal(listing.epicLinkKnown, true);
+  assert.equal(listing.issues[0]?.epicKey, "EX-9");
+});
