@@ -304,7 +304,7 @@ export class JiraClient {
         if (
           isRefusedRequest(error) &&
           !epicLinkFieldRefused &&
-          this.epicLinkField !== undefined
+          this.epicLinkField !== ""
         ) {
           // The site refused the request, most likely because of the Epic
           // Link field. Read the same page without it: if that works, the
@@ -403,7 +403,14 @@ export class JiraClient {
           // issues than were asked for. A site that caps the page size
           // answers fewer issues than were asked for and still has more, so
           // the listing cannot be called complete.
-          if (rawCount >= requested) {
+          if (rawCount === 0) {
+            sourceHasMore = false;
+            unreadable = true;
+          } else if (pageIssues.length > 0 && fresh.length === 0) {
+            // The site repeats a page: every issue on it was read before.
+            sourceHasMore = false;
+            unreadable = true;
+          } else if (rawCount >= requested) {
             sourceHasMore = true;
           } else {
             sourceHasMore = false;

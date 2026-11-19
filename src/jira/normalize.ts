@@ -31,6 +31,14 @@ interface RawIssue {
   };
 }
 
+/**
+ * The shape of an issue key: a project key and a number.
+ *
+ * The health tools report on issues of one project, so a relation is only
+ * read from a value that names an issue.
+ */
+const ISSUE_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
+
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
@@ -84,22 +92,39 @@ function readIssueLinks(raw: unknown): IssueLink[] {
  * uses. The custom field holds either an object with a key or the key
  * itself, depending on the site, and both are read.
  */
-function epicLinkKey(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    return text(value);
-  }
-  if (value === null || typeof value !== "object") {
+/**
+ * The epic key a field holds, when it names an issue of the same project.
+ *
+ * The value of an epic link field is the key of the epic, in the same
+ * project as the issue that holds it. A value that does not look like one
+ * - a team name, a label - is not a relation, and reading it as one would
+ * report an epic that does not exist.
+ */
+function epicLinkKey(value: unknown, issueKey: string): string | undefined {
+  const candidate =
+    typeof value === "string"
+      ? text(value)
+      : value === null || typeof value !== "object"
+        ? undefined
+        : text((value as { key?: unknown }).key);
+  if (candidate === undefined) {
     return undefined;
   }
-  return text((value as { key?: unknown }).key);
+  // The value has to name an issue - a project key and a number - to be a
+  // relation. A field that holds free text is not one, and reading it as
+  // one would report an epic that does not exist.
+  if (!ISSUE_KEY_PATTERN.test(candidate)) {
+    return undefined;
+  }
+  return candidate;
 }
 
 /**
  * Normalize one REST issue.
  *
  * The Epic Link field is read from the field the caller names first, because
- * an operator who names a field means it, then from the named field and from
- * the field with the usual id.
+ * an operator who names a field means it, then from the field the site calls
+ * `epicLink`, then from the field with the usual id.
  *
  * Returns `undefined` for an issue without a key: without a key it cannot be
  * reported on, and guessing one would produce a finding about an issue that
@@ -129,12 +154,16 @@ export function normalizeIssue(
   // Jira Cloud exposes the epic link as a custom field, other installations
   // expose it under its name. The id is site-specific, so the field the
   // caller names is read first: an operator who names a field means it.
+  //
+  // A value only names an epic when it looks like an issue key of the same
+  // project: a field that holds free text - a team name, say - would
+  // otherwise put a relation into the findings that no issue has.
   const epicKey =
     (epicLinkField === undefined
       ? undefined
-      : epicLinkKey((fields as Record<string, unknown>)[epicLinkField])) ??
-    epicLinkKey(fields.epicLink) ??
-    epicLinkKey(fields.customfield_10014);
+      : epicLinkKey((fields as Record<string, unknown>)[epicLinkField], key)) ??
+    epicLinkKey(fields.epicLink, key) ??
+    epicLinkKey(fields.customfield_10014, key);
 
   return {
     key,

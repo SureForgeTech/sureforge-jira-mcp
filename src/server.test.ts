@@ -664,3 +664,34 @@ test("an orphan says what it cannot know about the epic relation", async () => {
     await close();
   }
 });
+
+test("an orphan says the listing does not cover the project and the epic is unknown", async () => {
+  // Both unknowns at once: the listing may be missing issues, and the
+  // epic relation was not read. The finding says what is unknown, and
+  // does not claim that the listing points at nothing.
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [makeIssue({ key: "EX-1" })],
+        truncated: true,
+        dropped: 0,
+        epicLinkKnown: false,
+        examined: 1,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_orphaned_issues",
+      arguments: {},
+    });
+    const body = payload(result);
+    const findings = body.findings as Array<{ severity: string; detail: string }>;
+    assert.equal(findings[0].severity, "low");
+    assert.match(findings[0].detail, /epic relation could not be read/);
+    assert.match(findings[0].detail, /listing does not cover the whole project/);
+    assert.doesNotMatch(findings[0].detail, /no issue in the listing of \d+ issues points at it/);
+  } finally {
+    await close();
+  }
+});

@@ -776,3 +776,42 @@ test("a field id that names a base field falls back to the documented default", 
   assert.equal(listing.epicLinkKnown, true);
   assert.equal(listing.issues[0]?.epicKey, "EX-9");
 });
+
+test("a site that repeats a page ends the listing without a total", async () => {
+  // The site does not know the cursor endpoint and returns no total, and
+  // then repeats the same page. The listing must end there, not after
+  // fifty requests.
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "unknown endpoint" }, 404),
+    jsonResponse({ issues: pageOfIssues(100, 0) }),
+    jsonResponse({ issues: pageOfIssues(100, 0) }),
+  ]);
+
+  const listing = await client(fetchImpl).listIssues("EX");
+  assert.equal(requests.length, 3, `the listing must stop, requests: ${requests.length}`);
+  assert.equal(listing.truncated, true);
+});
+
+test("a field that holds free text is not read as the epic link", async () => {
+  // The operator named a field, but the field holds a team name rather
+  // than the key of an epic. Reading it as a relation would report an
+  // epic that does not exist, and would hide every real orphan.
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      issues: [
+        { key: "EX-1", fields: { customfield_10016: "Team A", summary: "Example issue" } },
+      ],
+      isLast: true,
+    }),
+  ]);
+
+  const site = new JiraClient({
+    baseUrl: "https://example.atlassian.net",
+    email: "reader@example.com",
+    apiToken: "example-token-value",
+    fetchImpl,
+    epicLinkField: "customfield_10016",
+  });
+  const listing = await site.listIssues("EX");
+  assert.equal(listing.issues[0]?.epicKey, undefined);
+});
