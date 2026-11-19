@@ -130,7 +130,8 @@ test("a parent that is not part of the listing is not reported", () => {
 
 test("an orphan in an incomplete listing is reported as low severity", () => {
   const findings = findOrphanedIssues([makeIssue({ key: "EX-1" })], {
-    complete: false,
+    listingComplete: false,
+    epicLinkKnown: true,
   });
   assert.equal(findings.length, 1);
   assert.equal(findings[0].severity, "low");
@@ -139,7 +140,8 @@ test("an orphan in an incomplete listing is reported as low severity", () => {
 
 test("an orphan in a complete listing is reported as medium severity", () => {
   const findings = findOrphanedIssues([makeIssue({ key: "EX-1" })], {
-    complete: true,
+    listingComplete: true,
+    epicLinkKnown: true,
   });
   assert.equal(findings[0].severity, "medium");
   assert.match(findings[0].detail, /no issue points at it/);
@@ -147,7 +149,7 @@ test("an orphan in a complete listing is reported as medium severity", () => {
 
 test("an orphan whose epic is not known does not state that it has no epic", () => {
   const findings = findOrphanedIssues([makeIssue({ key: "EX-1" })], {
-    complete: true,
+    listingComplete: true,
     epicLinkKnown: false,
   });
   assert.equal(findings.length, 1);
@@ -433,7 +435,7 @@ test("a blocking relation reported from both ends is reported once", () => {
 test("a missing parent in an incomplete listing is reported as low severity", () => {
   const findings = findBrokenHierarchies(
     [makeIssue({ key: "EX-1", parentKey: "EX-404" })],
-    { ...options, complete: false },
+    { ...options, listingComplete: false, epicLinkKnown: true },
   );
   assert.equal(findings.length, 1);
   assert.equal(findings[0].severity, "low");
@@ -443,7 +445,7 @@ test("a missing parent in an incomplete listing is reported as low severity", ()
 test("a missing parent in a complete listing is reported as high severity", () => {
   const findings = findBrokenHierarchies(
     [makeIssue({ key: "EX-1", parentKey: "EX-404" })],
-    { ...options, complete: true },
+    { ...options, listingComplete: true, epicLinkKnown: true },
   );
   assert.equal(findings[0].severity, "high");
   assert.match(findings[0].detail, /does not exist/);

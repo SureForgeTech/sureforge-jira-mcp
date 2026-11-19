@@ -701,3 +701,26 @@ test("listing versions reads the project versions", async () => {
     "/rest/api/3/project/EX/versions",
   );
 });
+
+test("an unrelated 400 does not blame the Epic Link field", async () => {
+  // The site refuses the request for a reason of its own. The listing
+  // fails - the retry without the field fails too - and the field is not
+  // blamed for it: the next listing still asks for the field, so the epic
+  // relation is not lost for the rest of the process.
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "bad request" }, 400),
+    jsonResponse({ message: "bad request" }, 400),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }], isLast: true }),
+  ]);
+
+  const site = client(fetchImpl);
+  await assert.rejects(() => site.listIssues("EX"));
+  assert.equal(requests.length, 2, "the listing was retried without the field");
+
+  const listing = await site.listIssues("EX");
+  assert.equal(listing.epicLinkKnown, true);
+  assert.ok(
+    requests[2]?.url.searchParams.get("fields")?.includes("customfield_10014"),
+    "the next listing still asks for the Epic Link field",
+  );
+});

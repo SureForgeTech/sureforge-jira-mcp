@@ -121,10 +121,14 @@ function blockingRelation(
  */
 export function findOrphanedIssues(
   issues: readonly Issue[],
-  options?: { complete?: boolean; epicLinkKnown?: boolean },
+  options?: { listingComplete?: boolean; epicLinkKnown?: boolean },
 ): Finding[] {
   const pointing = issuesPointingAt(issues);
-  const complete = options?.complete ?? true;
+  // Two unknowns, kept apart: the listing may be missing issues, and the
+  // epic relation may not have been read. The claim "no epic" needs the
+  // second; the claim "no issue points at it" needs both, because an
+  // epic's children point at it through the link that was not read.
+  const listingComplete = options?.listingComplete ?? true;
   const epicLinkKnown = options?.epicLinkKnown ?? true;
   const findings: Finding[] = [];
 
@@ -144,8 +148,8 @@ export function findOrphanedIssues(
       category: "orphaned-issue",
       issueKey: issue.key,
       summary: issue.summary,
-      detail: orphanDetail(issues.length, complete, epicLinkKnown),
-      severity: complete && epicLinkKnown ? "medium" : "low",
+      detail: orphanDetail(issues.length, listingComplete, epicLinkKnown),
+      severity: listingComplete && epicLinkKnown ? "medium" : "low",
       relatedKeys: [],
     });
   }
@@ -156,7 +160,7 @@ export function findOrphanedIssues(
 /** The detail of an orphan finding, told apart by what is known. */
 function orphanDetail(
   examined: number,
-  complete: boolean,
+  listingComplete: boolean,
   epicLinkKnown: boolean,
 ): string {
   const parts: string[] = ["The issue has no parent"];
@@ -166,11 +170,19 @@ function orphanDetail(
   parts.push("and no link to another issue");
   const subject = parts.join(", ");
 
-  const sentences = [
-    complete
-      ? `${subject}, and no issue points at it.`
-      : `${subject}, and no issue in the listing of ${examined} issues points at it.`,
-  ];
+  let pointing: string;
+  if (epicLinkKnown) {
+    pointing = listingComplete
+      ? "and no issue points at it."
+      : `and no issue in the listing of ${examined} issues points at it.`;
+  } else if (listingComplete) {
+    pointing =
+      "and whether any issue points at it is unknown, because the epic relation could not be read.";
+  } else {
+    pointing =
+      `and no issue in the listing of ${examined} issues points at it, but whether any issue points at it is unknown, because the epic relation could not be read.`;
+  }
+  const sentences = [`${subject}, ${pointing}`];
   if (!epicLinkKnown) {
     sentences.push("The epic of the issue is not known.");
   }
@@ -321,10 +333,14 @@ export function findStaleBlockers(
  */
 export function findBrokenHierarchies(
   issues: readonly Issue[],
-  options: RuleOptions & { complete?: boolean },
+  options: RuleOptions & { listingComplete?: boolean; epicLinkKnown?: boolean },
 ): Finding[] {
   const index = indexByKey(issues);
-  const complete = options.complete ?? true;
+  // A missing parent depends on the listing alone: an issue that is not in
+  // it may still exist. A missing epic depends on the epic relation too,
+  // because the epic link could not be read.
+  const listingComplete = options.listingComplete ?? true;
+  const epicLinkKnown = options.epicLinkKnown ?? true;
   const findings: Finding[] = [];
 
   const missing = (
@@ -332,7 +348,10 @@ export function findBrokenHierarchies(
     key: string,
     kind: "parent" | "epic",
   ): Finding => {
-    if (complete) {
+    // A parent is proven missing by the listing alone; an epic also needs
+    // the epic relation, which the site may have refused to answer.
+    const provable = listingComplete && (kind === "parent" || epicLinkKnown);
+    if (provable) {
       return {
         category: "broken-hierarchy",
         issueKey: issue.key,
@@ -342,11 +361,15 @@ export function findBrokenHierarchies(
         relatedKeys: [key],
       };
     }
+    const reason =
+      kind === "epic" && !epicLinkKnown
+        ? "the epic relation could not be read"
+        : "the listing does not cover the whole project";
     return {
       category: "broken-hierarchy",
       issueKey: issue.key,
       summary: issue.summary,
-      detail: `The ${kind} ${key} was not found in the listing of ${issues.length} issues, which does not cover the whole project.`,
+      detail: `The ${kind} ${key} was not found in the listing of ${issues.length} issues, and ${reason}.`,
       severity: "low",
       relatedKeys: [key],
     };

@@ -423,7 +423,11 @@ test("a listing that does not know the epic relation softens the findings", asyn
       detail: string;
     }>;
     assert.equal(findings[0].severity, "low");
-    assert.match(findings[0].detail, /no issue in the listing of 1 issues/);
+    // The listing covers the project, so the finding does not claim that it
+    // does not; what it cannot say is whether the issue has an epic, or
+    // whether the issues that point at it are all listed.
+    assert.doesNotMatch(findings[0].detail, /does not cover the whole project/);
+    assert.match(findings[0].detail, /epic relation could not be read/);
   } finally {
     await close();
   }
@@ -523,6 +527,139 @@ test("a limit that is not a positive number is refused", async () => {
       arguments: { limit: 0 },
     });
     assert.equal((result as { isError?: boolean }).isError, true);
+  } finally {
+    await close();
+  }
+});
+
+test("a listing that left issues out says how many", async () => {
+  // The count is part of the report: a listing that dropped issues is
+  // incomplete, and the tool says how many were left out.
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: ISSUES,
+        truncated: false,
+        dropped: 3,
+        epicLinkKnown: true,
+        examined: ISSUES.length,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_orphaned_issues",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(body.issuesDropped, 3);
+  } finally {
+    await close();
+  }
+});
+
+test("a missing parent stays high when the listing is complete but the epic relation is unknown", async () => {
+  // The listing covers the whole project, so a parent that is not in it
+  // does not exist. The epic relation being unknown says nothing about
+  // that, and must not downgrade the finding.
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [makeIssue({ key: "EX-7", parentKey: "EX-404" })],
+        truncated: false,
+        dropped: 0,
+        epicLinkKnown: false,
+        examined: 1,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_broken_hierarchies",
+      arguments: {},
+    });
+    const body = payload(result);
+    const findings = body.findings as Array<{
+      category: string;
+      severity: string;
+      detail: string;
+    }>;
+    const hierarchy = findings.find((f) => f.category === "broken-hierarchy");
+    assert.equal(hierarchy?.severity, "high");
+    assert.match(hierarchy?.detail ?? "", /The parent EX-404 does not exist\./);
+  } finally {
+    await close();
+  }
+});
+
+test("an unknown epic relation is hedged where it is used", async () => {
+  // The listing is complete, but the epic relation was not read: the
+  // findings that depend on it are hedged, and the listing is not
+  // described as if it were missing issues.
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [makeIssue({ key: "EX-8", epicKey: "EX-999" })],
+        truncated: false,
+        dropped: 0,
+        epicLinkKnown: false,
+        examined: 1,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_broken_hierarchies",
+      arguments: {},
+    });
+    const body = payload(result);
+    const findings = body.findings as Array<{
+      category: string;
+      severity: string;
+      detail: string;
+    }>;
+    const hierarchy = findings.find((f) => f.category === "broken-hierarchy");
+    assert.equal(hierarchy?.severity, "low");
+    assert.match(hierarchy?.detail ?? "", /epic relation could not be read/);
+    // The listing covers the project, so it is not described as if it did
+    // not.
+    assert.doesNotMatch(hierarchy?.detail ?? "", /does not cover the whole project/);
+  } finally {
+    await close();
+  }
+});
+
+test("an orphan says what it cannot know about the epic relation", async () => {
+  // The listing is complete, but the epic relation was not read, so the
+  // finding must not claim that the issue has no epic, and must not claim
+  // that nothing points at it: an epic's children point at it through the
+  // link that was not read.
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [makeIssue({ key: "EX-9" })],
+        truncated: false,
+        dropped: 0,
+        epicLinkKnown: false,
+        examined: 1,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_orphaned_issues",
+      arguments: {},
+    });
+    const body = payload(result);
+    const findings = body.findings as Array<{
+      category: string;
+      severity: string;
+      detail: string;
+    }>;
+    const orphan = findings.find((f) => f.category === "orphaned-issue");
+    assert.equal(orphan?.severity, "low");
+    assert.doesNotMatch(orphan?.detail ?? "", /no epic/);
+    assert.match(orphan?.detail ?? "", /epic relation could not be read/);
   } finally {
     await close();
   }

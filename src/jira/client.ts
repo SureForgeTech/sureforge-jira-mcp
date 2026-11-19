@@ -291,8 +291,11 @@ export class JiraClient {
           this.epicLinkField !== undefined
         ) {
           // The site refused the request, most likely because of the Epic
-          // Link field. Read the listing without it rather than failing:
-          // the epic link is then not known, and the listing says so.
+          // Link field. Read the same page without it: if that works, the
+          // field was the problem, the epic link is then not known, and
+          // the listing says so. If it fails too, the request itself is
+          // the problem, and its error is reported - the field is not
+          // blamed for it, and it is not dropped for the next listing.
           epicLinkFieldRefused = true;
           page -= 1;
           continue;

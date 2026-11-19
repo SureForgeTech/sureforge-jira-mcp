@@ -7,6 +7,7 @@ import {
   loadConfig,
   redact,
 } from "./config.js";
+import { JiraClient } from "./jira/client.js";
 
 const completeEnv = {
   JIRA_BASE_URL: "https://example.atlassian.net",
@@ -161,4 +162,39 @@ test("the described configuration never carries the token", () => {
   assert.equal(serialized.includes("example-token-value"), false);
   assert.equal(described.apiToken, "***");
   assert.equal(described.projectKey, "EXAMPLE");
+});
+
+test("the Epic Link field is read from the environment and asked for", async () => {
+  // The path an operator uses: the environment names the field, the
+  // configuration carries it, and the request asks for it. A break in any
+  // of the three would leave the feature disconnected from the
+  // environment, so the whole path is pinned here.
+  const config = loadConfig({
+    ...completeEnv,
+    JIRA_EPIC_LINK_FIELD: "customfield_99999",
+  });
+  assert.equal(config.epicLinkField, "customfield_99999");
+
+  const asked: string[] = [];
+  const site = new JiraClient({
+    baseUrl: config.baseUrl,
+    email: config.email,
+    apiToken: config.apiToken,
+    epicLinkField: config.epicLinkField,
+    fetchImpl: async (input) => {
+      asked.push(new URL(String(input)).searchParams.get("fields") ?? "");
+      return new Response(JSON.stringify({ issues: [], isLast: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  await site.listIssues("EXAMPLE");
+  assert.ok(
+    asked[0]?.includes("customfield_99999"),
+    `the request must ask for the named field, asked: ${asked.join(", ")}`,
+  );
+
+  // Without the variable the site default is used.
+  assert.equal(loadConfig(completeEnv).epicLinkField, undefined);
 });
