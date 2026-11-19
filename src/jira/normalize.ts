@@ -143,16 +143,21 @@ export function hasUnusableEpicValue(
     if (source === undefined || source === null) {
       return false;
     }
-    const value =
-      typeof source === "string"
-        ? source
-        : typeof source === "object"
-          ? (source as { key?: unknown }).key
-          : undefined;
-    if (typeof value !== "string" || value.length === 0) {
-      return false;
+    if (typeof source === "string") {
+      // A value that is there but is not an issue key: a number, a
+      // boolean, a list, a field that holds free text.
+      return source.length > 0 && !ISSUE_KEY_PATTERN.test(source);
     }
-    return !ISSUE_KEY_PATTERN.test(value);
+    if (typeof source === "object") {
+      const key = (source as { key?: unknown }).key;
+      if (key === undefined) {
+        // A value that is not an issue key at all - a select list, say.
+        return Object.keys(source as object).length > 0;
+      }
+      return typeof key === "string" && key.length > 0 && !ISSUE_KEY_PATTERN.test(key);
+    }
+    // A number or a boolean is never an issue key.
+    return true;
   });
 }
 

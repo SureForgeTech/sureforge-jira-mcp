@@ -27,9 +27,11 @@ is not in an incomplete listing is reported as "not found in the listing"
 rather than as a broken hierarchy, and an issue that nothing in an incomplete
 listing points at is reported as an orphan with a lower severity and a hedged
 detail, because a partial listing cannot prove that an issue does not exist.
-The same holds for the epic relation: when a site refuses the Epic Link field
-the result carries `epicLinkKnown: false`, and the findings that would state
-that an issue has no epic are hedged and lower in severity instead.
+The same holds for the epic relation: when a site refuses the Epic Link field,
+or when the field holds a value that cannot be an epic relation - free text, a
+number, a list - the result carries `epicLinkKnown: false`, and the findings
+that would state that an issue has no epic are hedged and lower in severity
+instead.
 
 ## Configuration
 

@@ -337,11 +337,17 @@ export class JiraClient {
       const rawIssues = (payload as { issues?: unknown } | undefined)?.issues;
       const rawCount = Array.isArray(rawIssues) ? rawIssues.length : 0;
       // A field that holds a value which cannot be an epic relation means
-      // the relation was not read, even though the site answered.
+      // the relation was not read, even though the site answered. Every
+      // issue of the page is checked: the field can hold a value on one
+      // issue and nothing on the next.
       if (
-        hasUnusableEpicValue(
-          (rawIssues as Array<{ fields?: unknown }> | undefined)?.[0]?.fields,
-          epicLinkFieldRefused ? undefined : effectiveEpicLinkField(this.epicLinkField),
+        (rawIssues as Array<{ fields?: unknown }> | undefined)?.some((raw) =>
+          hasUnusableEpicValue(
+            raw?.fields,
+            epicLinkFieldRefused
+              ? undefined
+              : effectiveEpicLinkField(this.epicLinkField),
+          ),
         )
       ) {
         epicValueUnreadable = true;

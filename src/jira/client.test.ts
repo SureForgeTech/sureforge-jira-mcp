@@ -859,3 +859,53 @@ test("an issue repeated within one page is counted once", async () => {
   assert.equal(listing.issues.length, 1);
   assert.equal(listing.examined, 1);
 });
+
+test("a field that cannot be an epic on any issue of a page leaves the relation unknown", async () => {
+  // The field holds a value on one issue of the page and nothing on the
+  // next, so the relation was not read for the first one either.
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      issues: [
+        { key: "EX-1", fields: { summary: "Example issue" } },
+        { key: "EX-2", fields: { customfield_10016: "Team A", summary: "Example issue" } },
+      ],
+      isLast: true,
+    }),
+  ]);
+
+  const site = new JiraClient({
+    baseUrl: "https://example.atlassian.net",
+    email: "reader@example.com",
+    apiToken: "example-token-value",
+    fetchImpl,
+    epicLinkField: "customfield_10016",
+  });
+  const listing = await site.listIssues("EX");
+  assert.equal(listing.epicLinkKnown, false);
+});
+
+test("a field whose value is not a key at all leaves the relation unknown", async () => {
+  // A number, a list and a select list are values the relation cannot be
+  // read from, so the relation was not read.
+  for (const value of [5, ["Team A"], { value: "Team A" }]) {
+    const { fetchImpl } = fakeFetch([
+      jsonResponse({
+        issues: [{ key: "EX-1", fields: { customfield_10016: value, summary: "Example" } }],
+        isLast: true,
+      }),
+    ]);
+    const site = new JiraClient({
+      baseUrl: "https://example.atlassian.net",
+      email: "reader@example.com",
+      apiToken: "example-token-value",
+      fetchImpl,
+      epicLinkField: "customfield_10016",
+    });
+    const listing = await site.listIssues("EX");
+    assert.equal(
+      listing.epicLinkKnown,
+      false,
+      `a value of ${JSON.stringify(value)} cannot be an epic relation`,
+    );
+  }
+});

@@ -96,8 +96,10 @@ export interface IssueListing {
    * Whether the epic relation is known.
    *
    * It is false when the site refused the Epic Link field and the listing
-   * was read without it. The epic relation is then unknown, so a finding
-   * that says an issue has no epic cannot be stated as fact.
+   * was read without it, and when the field holds a value that cannot be
+   * an epic relation - free text, a number, a list. The epic relation is
+   * then unknown, so a finding that says an issue has no epic cannot be
+   * stated as fact.
    */
   readonly epicLinkKnown: boolean;
 }

@@ -30,4 +30,5 @@ project uses semantic versioning.
   that depend on the absence of an issue are hedged and lower in severity,
   and the result carries `truncated`, `issuesDropped` and `epicLinkKnown`.
   The findings that would state that an issue has no epic are hedged as well
-  when the site refused the Epic Link field.
+  when the site refused the Epic Link field, or when the field holds a value
+  that cannot be an epic relation.
