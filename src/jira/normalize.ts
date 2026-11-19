@@ -86,13 +86,6 @@ function readIssueLinks(raw: unknown): IssueLink[] {
 }
 
 /**
- * Read the key of an epic link.
- *
- * The link is read from the named field or from the custom field Jira Cloud
- * uses. The custom field holds either an object with a key or the key
- * itself, depending on the site, and both are read.
- */
-/**
  * The epic key a field holds, when it names an issue.
  *
  * The value of an epic link field is the key of the epic. A value that
@@ -154,7 +147,8 @@ export function hasUnusableEpicValue(
         // A value that is not an issue key at all - a select list, say.
         return Object.keys(source as object).length > 0;
       }
-      return typeof key === "string" && key.length > 0 && !ISSUE_KEY_PATTERN.test(key);
+      // A key that is not a string cannot be read as an issue key.
+      return typeof key !== "string" || !ISSUE_KEY_PATTERN.test(key);
     }
     // A number or a boolean is never an issue key.
     return true;

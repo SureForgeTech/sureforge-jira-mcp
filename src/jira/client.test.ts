@@ -887,7 +887,7 @@ test("a field that cannot be an epic on any issue of a page leaves the relation 
 test("a field whose value is not a key at all leaves the relation unknown", async () => {
   // A number, a list and a select list are values the relation cannot be
   // read from, so the relation was not read.
-  for (const value of [5, ["Team A"], { value: "Team A" }]) {
+  for (const value of [5, ["Team A"], { value: "Team A" }, { key: 5 }]) {
     const { fetchImpl } = fakeFetch([
       jsonResponse({
         issues: [{ key: "EX-1", fields: { customfield_10016: value, summary: "Example" } }],
