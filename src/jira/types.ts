@@ -72,15 +72,36 @@ export interface IssueListing {
   /** The issues that were read. */
   readonly issues: readonly Issue[];
   /**
-   * Whether the listing stopped at the issue cap.
+   * Whether the listing may be missing issues.
    *
-   * A truncated listing does not cover the whole project, so an issue that is
-   * not in it may still exist somewhere else. The findings that depend on the
-   * absence of an issue are reported differently when it is truncated.
+   * It is true when the listing stopped at the issue cap or at the page cap,
+   * when the site offered more but gave no way to read it, when the site
+   * repeated a page, and when an issue was left out for want of a key. A
+   * truncated listing does not cover the whole project, so an issue that is
+   * not in it may still exist somewhere else. The findings that depend on
+   * the absence of an issue are reported differently when it is truncated.
    */
   readonly truncated: boolean;
   /** The number of issues that were read. */
   readonly examined: number;
+  /**
+   * The number of issues the listing left out: the ones the site returned
+   * that carried no key, and the ones the issue cap cut off.
+   *
+   * Such an issue may point at another one, so a listing that left any out
+   * does not cover the whole project either.
+   */
+  readonly dropped: number;
+  /**
+   * Whether the epic relation is known.
+   *
+   * It is false when the site refused the Epic Link field and the listing
+   * was read without it, and when the field holds a value that cannot be
+   * an epic relation - free text, a number, a list. The epic relation is
+   * then unknown, so a finding that says an issue has no epic cannot be
+   * stated as fact.
+   */
+  readonly epicLinkKnown: boolean;
 }
 
 /** The categories of finding the health rules produce. */

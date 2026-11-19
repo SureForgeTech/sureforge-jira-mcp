@@ -19,12 +19,19 @@ thresholds that apply to it (`staleDays`, `maxDepth`). The findings are
 ordered worst first.
 
 Every tool result carries `issuesExamined`, the number of issues it looked
-at. A listing reads at most 2000 issues per project; when that cap is
-reached the result also carries `truncated: true`. A parent or epic that is
-not in an incomplete listing is reported as "not found in the listing" rather
-than as a broken hierarchy, and an issue that nothing in an incomplete listing
-points at is reported as an orphan with a lower severity and a hedged
+at. A listing reads at most 2000 issues per project. When the listing may be
+missing issues the result carries `truncated: true`, and `issuesDropped`
+names how many issues the listing left out - the ones the site returned
+without a key, and the ones the issue cap cut off. A parent or epic that
+is not in an incomplete listing is reported as "not found in the listing"
+rather than as a broken hierarchy, and an issue that nothing in an incomplete
+listing points at is reported as an orphan with a lower severity and a hedged
 detail, because a partial listing cannot prove that an issue does not exist.
+The same holds for the epic relation: when a site refuses the Epic Link field,
+or when the field holds a value that cannot be an epic relation - free text, a
+number, a list - the result carries `epicLinkKnown: false`, and the findings
+that would state that an issue has no epic are hedged and lower in severity
+instead.
 
 ## Configuration
 
@@ -40,6 +47,7 @@ disk and no credential is ever committed.
 | `JIRA_STALE_DAYS` | no | Days without an update that make a blocker stale. Defaults to 14. |
 | `JIRA_MAX_DEPTH` | no | Levels a hierarchy may have before it is reported. Defaults to 5. |
 | `JIRA_TIMEOUT_MS` | no | The request timeout in milliseconds. Defaults to 15000. |
+| `JIRA_EPIC_LINK_FIELD` | no | The id of the Epic Link field, `customfield_10014` by default. The id is site-specific; a site that refuses the request is read without the field instead of failing. |
 
 Check what is set without printing a value:
 

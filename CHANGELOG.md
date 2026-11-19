@@ -20,3 +20,15 @@ project uses semantic versioning.
 - The configuration comes from the environment only: the site, the account,
   the API token, the project and the two thresholds. The token is redacted
   from every message.
+- `JIRA_EPIC_LINK_FIELD` names the Epic Link field, `customfield_10014` by
+  default. A site that refuses the field is read without it, and the result
+  says that the epic relation is unknown.
+
+### Changed
+
+- A listing that may be missing issues reports itself as such: the findings
+  that depend on the absence of an issue are hedged and lower in severity,
+  and the result carries `truncated`, `issuesDropped` and `epicLinkKnown`.
+  The findings that would state that an issue has no epic are hedged as well
+  when the site refused the Epic Link field, or when the field holds a value
+  that cannot be an epic relation.

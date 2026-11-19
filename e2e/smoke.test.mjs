@@ -87,7 +87,11 @@ function startMockJira() {
       );
       return;
     }
-    response.end(JSON.stringify({ issues: MOCK_ISSUES, total: MOCK_ISSUES.length }));
+    // The shape of the current search endpoint: the last page says so, so
+    // the listing is a complete one and the findings are not softened.
+    response.end(
+      JSON.stringify({ issues: MOCK_ISSUES, total: MOCK_ISSUES.length, isLast: true }),
+    );
   });
 
   return new Promise((resolve) => {
@@ -170,6 +174,11 @@ test("the built server answers the health tools over stdio", async (t) => {
   assert.equal(summary.status, "needs-attention");
   assert.equal(summary.total, 2);
   assert.equal(summary.projectKey, "EXAMPLE");
+  assert.equal(
+    summary.truncated,
+    undefined,
+    "the listing was complete, so the findings are not softened",
+  );
 
   assert.ok(mock.seen.requests >= 3, "the mock Jira was asked for the data");
   assert.equal(mock.seen.authorized, true, "the request carried the credentials");

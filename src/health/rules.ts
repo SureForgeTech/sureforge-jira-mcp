@@ -114,13 +114,22 @@ function blockingRelation(
  * When the listing of the project is not complete, an issue that is not in
  * it may still point at this one, so the finding is reported as low severity
  * and says that nothing in the listing points at the issue.
+ *
+ * When the epic relation is not known, because the site refused the Epic
+ * Link field, the finding cannot say that the issue has no epic: it says the
+ * epic is not known, and it is reported as low severity.
  */
 export function findOrphanedIssues(
   issues: readonly Issue[],
-  options?: { complete?: boolean },
+  options?: { listingComplete?: boolean; epicLinkKnown?: boolean },
 ): Finding[] {
   const pointing = issuesPointingAt(issues);
-  const complete = options?.complete ?? true;
+  // Two unknowns, kept apart: the listing may be missing issues, and the
+  // epic relation may not have been read. The claim "no epic" needs the
+  // second; the claim "no issue points at it" needs both, because an
+  // epic's children point at it through the link that was not read.
+  const listingComplete = options?.listingComplete ?? true;
+  const epicLinkKnown = options?.epicLinkKnown ?? true;
   const findings: Finding[] = [];
 
   for (const issue of issues) {
@@ -139,15 +148,47 @@ export function findOrphanedIssues(
       category: "orphaned-issue",
       issueKey: issue.key,
       summary: issue.summary,
-      detail: complete
-        ? "The issue has no parent, no epic and no link to another issue, and no issue points at it."
-        : `The issue has no parent, no epic and no link to another issue, and no issue in the listing of ${issues.length} issues points at it.`,
-      severity: complete ? "medium" : "low",
+      detail: orphanDetail(issues.length, listingComplete, epicLinkKnown),
+      severity: listingComplete && epicLinkKnown ? "medium" : "low",
       relatedKeys: [],
     });
   }
 
   return findings;
+}
+
+/** The detail of an orphan finding, told apart by what is known. */
+function orphanDetail(
+  examined: number,
+  listingComplete: boolean,
+  epicLinkKnown: boolean,
+): string {
+  const parts: string[] = ["The issue has no parent"];
+  if (epicLinkKnown) {
+    parts.push("no epic");
+  }
+  parts.push("and no link to another issue");
+  const subject = parts.join(", ");
+
+  let pointing: string;
+  if (epicLinkKnown) {
+    pointing = listingComplete
+      ? "and no issue points at it."
+      : `and no issue in the listing of ${examined} issues points at it.`;
+  } else if (listingComplete) {
+    pointing =
+      "and whether any issue points at it is unknown, because the epic relation could not be read.";
+  } else {
+    // An epic's children point at the issue through the link that was not
+    // read, so even the listing cannot be said to point at nothing.
+    pointing =
+      "and whether any issue points at it is unknown, because the epic relation could not be read and the listing does not cover the whole project.";
+  }
+  const sentences = [`${subject}, ${pointing}`];
+  if (!epicLinkKnown) {
+    sentences.push("The epic of the issue is not known.");
+  }
+  return sentences.join(" ");
 }
 
 /**
@@ -289,15 +330,25 @@ export function findStaleBlockers(
  * than the depth limit. A cycle is reported once, not once per issue in it.
  *
  * When the listing of the project is not complete, an issue that is not in
- * it may still exist, so a missing parent or epic is reported as "not found
- * in the listing" and with a lower severity.
+ * it may still exist, so a missing parent is reported as "not found in the
+ * listing" and with a lower severity.
+ *
+ * A missing epic also depends on the epic relation, which the site may
+ * have refused to answer: an epic that could not be read is reported as
+ * not found, and with a lower severity, even in a complete listing. A
+ * missing parent does not: the listing alone proves it, so a complete
+ * listing reports it as broken whatever the epic relation says.
  */
 export function findBrokenHierarchies(
   issues: readonly Issue[],
-  options: RuleOptions & { complete?: boolean },
+  options: RuleOptions & { listingComplete?: boolean; epicLinkKnown?: boolean },
 ): Finding[] {
   const index = indexByKey(issues);
-  const complete = options.complete ?? true;
+  // A missing parent depends on the listing alone: an issue that is not in
+  // it may still exist. A missing epic depends on the epic relation too,
+  // because the epic link could not be read.
+  const listingComplete = options.listingComplete ?? true;
+  const epicLinkKnown = options.epicLinkKnown ?? true;
   const findings: Finding[] = [];
 
   const missing = (
@@ -305,7 +356,10 @@ export function findBrokenHierarchies(
     key: string,
     kind: "parent" | "epic",
   ): Finding => {
-    if (complete) {
+    // A parent is proven missing by the listing alone; an epic also needs
+    // the epic relation, which the site may have refused to answer.
+    const provable = listingComplete && (kind === "parent" || epicLinkKnown);
+    if (provable) {
       return {
         category: "broken-hierarchy",
         issueKey: issue.key,
@@ -315,11 +369,15 @@ export function findBrokenHierarchies(
         relatedKeys: [key],
       };
     }
+    const reason =
+      kind === "epic" && !epicLinkKnown
+        ? "the epic relation could not be read"
+        : "the listing does not cover the whole project";
     return {
       category: "broken-hierarchy",
       issueKey: issue.key,
       summary: issue.summary,
-      detail: `The ${kind} ${key} was not found in the listing of ${issues.length} issues, which does not cover the whole project.`,
+      detail: `The ${kind} ${key} was not found in the listing of ${issues.length} issues, and ${reason}.`,
       severity: "low",
       relatedKeys: [key],
     };

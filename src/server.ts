@@ -126,9 +126,25 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
    */
   const loadIssues = async (
     projectKey: string,
-  ): Promise<{ issues: Issue[]; complete: boolean }> => {
+  ): Promise<{
+    issues: Issue[];
+    listingComplete: boolean;
+    epicLinkKnown: boolean;
+    listing: IssueListing;
+  }> => {
     const listing = await options.reader.listIssues(projectKey);
-    return { issues: [...listing.issues], complete: !listing.truncated };
+    return {
+      issues: [...listing.issues],
+      // Two different unknowns, kept apart: a listing may be missing
+      // issues, and the epic relation may not have been read. A rule that
+      // depends on the absence of an issue needs the first; a rule that
+      // depends on the epic relation needs the second. Folding them into
+      // one flag made a missing parent look like an unproven absence, and
+      // downgraded it from high severity.
+      listingComplete: !listing.truncated,
+      epicLinkKnown: listing.epicLinkKnown,
+      listing,
+    };
   };
 
   /** Read the release versions of a project. */
@@ -138,10 +154,12 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
   /** The part of a tool result that describes the listing it is based on. */
   const listingReport = (
     issues: readonly Issue[],
-    complete: boolean,
+    listing: IssueListing,
   ): Record<string, unknown> => ({
     issuesExamined: issues.length,
-    ...(complete ? {} : { truncated: true }),
+    ...(listing.truncated ? { truncated: true } : {}),
+    ...(listing.dropped > 0 ? { issuesDropped: listing.dropped } : {}),
+    ...(listing.epicLinkKnown ? {} : { epicLinkKnown: false }),
   });
 
   /**
@@ -187,12 +205,16 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete } = await loadIssues(projectKey);
-      const findings = findOrphanedIssues(issues, { complete });
+      const { issues, listingComplete, epicLinkKnown, listing } =
+        await loadIssues(projectKey);
+      const findings = findOrphanedIssues(issues, {
+        listingComplete,
+        epicLinkKnown,
+      });
       return {
         projectKey,
         count: findings.length,
-        ...listingReport(issues, complete),
+        ...listingReport(issues, listing),
         findings: ranked(findings, args.limit ?? 100),
       };
     },
@@ -208,13 +230,13 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete } = await loadIssues(projectKey);
+      const { issues, listing } = await loadIssues(projectKey);
       const versions = await loadVersions(projectKey);
       const findings = findMissingReleaseVersions(issues, versions);
       return {
         projectKey,
         count: findings.length,
-        ...listingReport(issues, complete),
+        ...listingReport(issues, listing),
         findings: ranked(findings, args.limit ?? 100),
       };
     },
@@ -239,7 +261,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete } = await loadIssues(projectKey);
+      const { issues, listing } = await loadIssues(projectKey);
       const versions = await loadVersions(projectKey);
       const findings = findStaleBlockers(issues, versions, {
         staleDays: args.staleDays ?? options.staleDays,
@@ -249,7 +271,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
       return {
         projectKey,
         count: findings.length,
-        ...listingReport(issues, complete),
+        ...listingReport(issues, listing),
         findings: ranked(findings, args.limit ?? 100),
       };
     },
@@ -274,17 +296,19 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete } = await loadIssues(projectKey);
+      const { issues, listingComplete, epicLinkKnown, listing } =
+        await loadIssues(projectKey);
       const findings = findBrokenHierarchies(issues, {
         staleDays: options.staleDays,
         maxDepth: args.maxDepth ?? options.maxDepth,
         now: now(),
-        complete,
+        listingComplete,
+        epicLinkKnown,
       });
       return {
         projectKey,
         count: findings.length,
-        ...listingReport(issues, complete),
+        ...listingReport(issues, listing),
         findings: ranked(findings, args.limit ?? 100),
       };
     },
@@ -323,10 +347,14 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete } = await loadIssues(projectKey);
+      const { issues, listingComplete, epicLinkKnown, listing } =
+        await loadIssues(projectKey);
       const versions = await loadVersions(projectKey);
       const findings = [
-        ...findOrphanedIssues(issues, { complete }),
+        ...findOrphanedIssues(issues, {
+          listingComplete,
+          epicLinkKnown,
+        }),
         ...findMissingReleaseVersions(issues, versions),
         ...findStaleBlockers(issues, versions, {
           staleDays: args.staleDays ?? options.staleDays,
@@ -337,14 +365,15 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           staleDays: options.staleDays,
           maxDepth: args.maxDepth ?? options.maxDepth,
           now: now(),
-          complete,
+          listingComplete,
+          epicLinkKnown,
         }),
       ];
       const summary = summarizeHealth(findings, { limit: args.limit ?? 10 });
       return {
         projectKey,
         generatedAt: now().toISOString(),
-        ...listingReport(issues, complete),
+        ...listingReport(issues, listing),
         ...summary,
       };
     },

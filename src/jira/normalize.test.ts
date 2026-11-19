@@ -90,6 +90,28 @@ test("the epic link is read when the custom field holds the key itself", () => {
   assert.equal(custom?.epicKey, "EX-9");
 });
 
+test("the epic link is read from the field the caller names", () => {
+  const issue = normalizeIssue(
+    { key: "EX-1", fields: { customfield_10100: { key: "EX-9" } } },
+    "customfield_10100",
+  );
+  assert.equal(issue?.epicKey, "EX-9");
+});
+
+test("the field the caller names wins over the usual id", () => {
+  const issue = normalizeIssue(
+    {
+      key: "EX-1",
+      fields: {
+        customfield_10100: { key: "EX-9" },
+        customfield_10014: { key: "EX-8" },
+      },
+    },
+    "customfield_10100",
+  );
+  assert.equal(issue?.epicKey, "EX-9");
+});
+
 test("an epic link that names nothing is left out", () => {
   const issue = normalizeIssue({
     key: "EX-1",

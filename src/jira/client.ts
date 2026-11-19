@@ -6,7 +6,11 @@
  * drive the real request-building and response-handling code against a local
  * mock instead of a live Jira.
  */
-import { normalizeIssues, normalizeVersions } from "./normalize.js";
+import {
+  hasUnusableEpicValue,
+  normalizeIssues,
+  normalizeVersions,
+} from "./normalize.js";
 import type { Issue, IssueListing, ProjectVersion } from "./types.js";
 
 /** An error raised by the Jira API or by the transport around it. */
@@ -37,10 +41,21 @@ export interface JiraClientOptions {
   readonly timeoutMs?: number;
   /** The largest number of issues one listing may return; defaults to 2000. */
   readonly maxIssues?: number;
+  /**
+   * The id of the Epic Link field, for example `customfield_10014`.
+   *
+   * The id is site-specific: a project in the classic layout or on Jira
+   * Server uses another one. When the site refuses the field, the listing
+   * is read without it rather than failing.
+   */
+  readonly epicLinkField?: string;
 }
 
+/** The default id of the Epic Link field. */
+export const DEFAULT_EPIC_LINK_FIELD = "customfield_10014";
+
 /** The fields the health rules read. */
-const ISSUE_FIELDS = [
+const BASE_ISSUE_FIELDS = [
   "summary",
   "status",
   "issuetype",
@@ -54,12 +69,44 @@ const ISSUE_FIELDS = [
   "priority",
   "duedate",
   "project",
-  // The Epic Link field of Jira Cloud and Jira Server. The named field
-  // "epicLink" is not asked for, because no installation defines it and a
-  // site may refuse a request that names a field it does not know. The
-  // normalizer still reads it if a site sends it anyway.
-  "customfield_10014",
-].join(",");
+];
+
+/**
+ * The fields one request asks for.
+ *
+ * The Epic Link field is asked for by its id, because no installation names
+ * it `epicLink` and a site may refuse a request that names a field it does
+ * not know. An id that names a field the server always asks for is ignored:
+ * it cannot be the epic link, and reading it would put a wrong value into
+ * the rules.
+ */
+export function issueFields(epicLinkField?: string): string {
+  // An undefined id means the site refused the field: it is not asked for
+  // again. A named id that cannot be the epic link falls back to the
+  // documented default, so the epic relation is still read.
+  const field =
+    epicLinkField === undefined ? undefined : effectiveEpicLinkField(epicLinkField);
+  return field === undefined
+    ? BASE_ISSUE_FIELDS.join(",")
+    : [...BASE_ISSUE_FIELDS, field].join(",");
+}
+
+/**
+ * The Epic Link field the connector actually uses.
+ *
+ * An id that names a field the server always asks for is ignored: it
+ * cannot be the epic link, and reading it would put a wrong relation into
+ * the rules. The documented default is used instead, so the epic relation
+ * is still read - and still reported as known. The same id has to be
+ * ignored when the issues are read, not only when the request is built.
+ */
+export function effectiveEpicLinkField(epicLinkField?: string): string {
+  const field = epicLinkField?.trim();
+  if (field === undefined || field === "" || BASE_ISSUE_FIELDS.includes(field)) {
+    return DEFAULT_EPIC_LINK_FIELD;
+  }
+  return field;
+}
 
 /** The number of issues one search page may return. */
 const PAGE_SIZE = 100;
@@ -114,6 +161,11 @@ function isUnknownEndpoint(error: unknown): boolean {
   );
 }
 
+/** Whether a status means the site refused the request itself. */
+function isRefusedRequest(error: unknown): boolean {
+  return error instanceof JiraError && error.status === 400;
+}
+
 export class JiraClient {
   readonly baseUrl: string;
   private readonly email: string;
@@ -121,6 +173,7 @@ export class JiraClient {
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
   private readonly maxIssues: number;
+  private readonly epicLinkField?: string;
   /** The search endpoint that worked, remembered after the first page. */
   private searchPath?: string;
 
@@ -131,6 +184,7 @@ export class JiraClient {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? 15000;
     this.maxIssues = options.maxIssues ?? DEFAULT_MAX_ISSUES;
+    this.epicLinkField = options.epicLinkField ?? DEFAULT_EPIC_LINK_FIELD;
   }
 
   /** The authorization header. The token never leaves this method. */
@@ -202,6 +256,14 @@ export class JiraClient {
     const limit = Math.min(options?.maxIssues ?? this.maxIssues, this.maxIssues);
 
     const issues: Issue[] = [];
+    const seenKeys = new Set<string>();
+    let dropped = 0;
+    // Whether this listing was refused the Epic Link field. It is per
+    // listing: one refused request must not soften every later listing.
+    let epicLinkFieldRefused = false;
+    // A field that holds a value which is not an issue key means the epic
+    // relation was not read.
+    let epicValueUnreadable = false;
     let nextPageToken: string | undefined;
     let startAt = 0;
     /**
@@ -210,7 +272,7 @@ export class JiraClient {
      * - `cap`: the issue cap was reached and more issues may exist;
      * - `pages`: the page cap was reached and more pages may exist;
      * - `unreadable`: the site said there was more but gave no way to
-     *   read it, so the listing is incomplete.
+     *   read it, or it repeated a page, so the listing is incomplete.
      */
     let stopReason:
       | "source"
@@ -230,7 +292,9 @@ export class JiraClient {
       const search = new URLSearchParams({
         jql,
         maxResults: String(requested),
-        fields: ISSUE_FIELDS,
+        fields: issueFields(
+          epicLinkFieldRefused ? undefined : this.epicLinkField,
+        ),
       });
 
       const path = this.searchPath ?? CURSOR_SEARCH_PATH;
@@ -244,22 +308,70 @@ export class JiraClient {
       try {
         payload = await this.request(path, search);
       } catch (error) {
-        if (this.searchPath !== undefined || !isUnknownEndpoint(error)) {
+        if (isRefusedRequest(error) && !epicLinkFieldRefused) {
+          // The site refused the request, most likely because of the Epic
+          // Link field. Read the same page without it: if that works, the
+          // field was the problem, the epic link is then not known, and
+          // the listing says so. If it fails too, the request itself is
+          // the problem, and its error is reported - the field is not
+          // blamed for it, and it is not dropped for the next listing.
+          epicLinkFieldRefused = true;
+          page -= 1;
+          continue;
+        }
+        if (this.searchPath !== undefined) {
           throw error;
         }
-        // The site does not know the current endpoint: use the earlier one
-        // from here on, and try this page again against it. The page is not
-        // counted twice.
-        this.searchPath = OFFSET_SEARCH_PATH;
-        page -= 1;
-        continue;
+        if (isUnknownEndpoint(error)) {
+          // The site does not know the current endpoint: use the earlier
+          // one from here on, and try this page again against it. The page
+          // is not counted twice.
+          this.searchPath = OFFSET_SEARCH_PATH;
+          page -= 1;
+          continue;
+        }
+        throw error;
       }
       this.searchPath = path;
 
       const rawIssues = (payload as { issues?: unknown } | undefined)?.issues;
       const rawCount = Array.isArray(rawIssues) ? rawIssues.length : 0;
-      const pageIssues = normalizeIssues(rawIssues);
-      issues.push(...pageIssues);
+      // A field that holds a value which cannot be an epic relation means
+      // the relation was not read, even though the site answered. Every
+      // issue of the page is checked: the field can hold a value on one
+      // issue and nothing on the next.
+      if (
+        (rawIssues as Array<{ fields?: unknown }> | undefined)?.some((raw) =>
+          hasUnusableEpicValue(
+            raw?.fields,
+            epicLinkFieldRefused
+              ? undefined
+              : effectiveEpicLinkField(this.epicLinkField),
+          ),
+        )
+      ) {
+        epicValueUnreadable = true;
+      }
+      const pageIssues = normalizeIssues(
+        rawIssues,
+        epicLinkFieldRefused ? undefined : effectiveEpicLinkField(this.epicLinkField),
+      );
+      dropped += rawCount - pageIssues.length;
+
+      // An issue repeated within one page is one issue: the page's own
+      // keys are not in the set yet.
+      const seenOnPage = new Set<string>();
+      const fresh = pageIssues.filter((issue) => {
+        if (seenKeys.has(issue.key) || seenOnPage.has(issue.key)) {
+          return false;
+        }
+        seenOnPage.add(issue.key);
+        return true;
+      });
+      for (const issue of fresh) {
+        seenKeys.add(issue.key);
+      }
+      issues.push(...fresh);
 
       const pagePayload = payload as
         | { isLast?: unknown; nextPageToken?: unknown; total?: unknown }
@@ -279,9 +391,14 @@ export class JiraClient {
           // The site says there is more but gives no way to read it.
           sourceHasMore = false;
           unreadable = true;
-        } else if (pageIssues.length === 0) {
+        } else if (rawCount === 0) {
           // The site says there is more, gives a way to read it, and then
           // hands over an empty page. The listing is incomplete.
+          sourceHasMore = false;
+          unreadable = true;
+        } else if (pageIssues.length > 0 && fresh.length === 0) {
+          // The site repeats a page: every issue on it was read before.
+          // Reading it again would only repeat the same issues.
           sourceHasMore = false;
           unreadable = true;
         } else {
@@ -302,13 +419,31 @@ export class JiraClient {
               // an empty page, so the listing is incomplete.
               unreadable = true;
             }
+          } else if (pageIssues.length > 0 && fresh.length === 0) {
+            // The site repeats a page.
+            sourceHasMore = false;
+            unreadable = true;
           } else {
             sourceHasMore = more;
           }
         } else {
           // Without a total, the listing ends when the site returns fewer
-          // issues than were asked for.
-          sourceHasMore = rawCount >= requested;
+          // issues than were asked for. A site that caps the page size
+          // answers fewer issues than were asked for and still has more, so
+          // the listing cannot be called complete.
+          if (rawCount === 0) {
+            sourceHasMore = false;
+            unreadable = true;
+          } else if (pageIssues.length > 0 && fresh.length === 0) {
+            // The site repeats a page: every issue on it was read before.
+            sourceHasMore = false;
+            unreadable = true;
+          } else if (rawCount >= requested) {
+            sourceHasMore = true;
+          } else {
+            sourceHasMore = false;
+            unreadable = true;
+          }
         }
         // The offset moves by the number of issues the site returned, not by
         // the number that could be normalized, so the next window does not
@@ -335,10 +470,20 @@ export class JiraClient {
     }
 
     const kept = issues.slice(0, limit);
+    // The issues the cap cut off are lost, so they count as dropped.
+    dropped += issues.length - kept.length;
     return {
       issues: kept,
-      truncated: stopReason !== "source",
+      // An issue without a key is left out of the listing, and such an issue
+      // may point at another one. The listing is therefore incomplete when
+      // any issue was left out.
+      truncated: stopReason !== "source" || dropped > 0,
       examined: kept.length,
+      dropped,
+      // A site that refused the Epic Link field was read without it, so the
+      // epic relation is not known and the findings that depend on the
+      // absence of an epic cannot be stated as fact.
+      epicLinkKnown: !epicLinkFieldRefused && !epicValueUnreadable,
     };
   }
 
