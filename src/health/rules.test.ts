@@ -145,6 +145,21 @@ test("an orphan in a complete listing is reported as medium severity", () => {
   assert.match(findings[0].detail, /no issue points at it/);
 });
 
+test("an orphan whose epic is not known does not state that it has no epic", () => {
+  const findings = findOrphanedIssues([makeIssue({ key: "EX-1" })], {
+    complete: true,
+    epicLinkKnown: false,
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, "low");
+  assert.equal(
+    findings[0].detail.includes("no epic"),
+    false,
+    "the epic relation is not known",
+  );
+  assert.match(findings[0].detail, /The epic of the issue is not known/);
+});
+
 test("a stale blocker of open work is reported", () => {
   const findings = findStaleBlockers(
     [

@@ -97,9 +97,9 @@ function epicLinkKey(value: unknown): string | undefined {
 /**
  * Normalize one REST issue.
  *
- * The Epic Link field is read from the named field, from the field with the
- * usual id, and from the field the caller names, because the id is
- * site-specific.
+ * The Epic Link field is read from the field the caller names first, because
+ * an operator who names a field means it, then from the named field and from
+ * the field with the usual id.
  *
  * Returns `undefined` for an issue without a key: without a key it cannot be
  * reported on, and guessing one would produce a finding about an issue that

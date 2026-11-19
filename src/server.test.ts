@@ -429,6 +429,31 @@ test("a listing that does not know the epic relation softens the findings", asyn
   }
 });
 
+test("the result says how many issues the site left out", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [makeIssue({ key: "EX-1" })],
+        truncated: true,
+        dropped: 3,
+        examined: 1,
+        epicLinkKnown: true,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_orphaned_issues",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(body.issuesDropped, 3);
+    assert.equal(body.truncated, true);
+  } finally {
+    await close();
+  }
+});
+
 test("the tools accept another project key", async () => {
   const asked: string[] = [];
   const { client, close } = await connect(

@@ -60,6 +60,23 @@ test("every missing variable is named in the error", () => {
   }
 });
 
+test("the Epic Link field id is read and must look like a field id", () => {
+  assert.equal(
+    loadConfig({ ...completeEnv, JIRA_EPIC_LINK_FIELD: "customfield_10100" })
+      .epicLinkField,
+    "customfield_10100",
+  );
+  assert.equal(
+    loadConfig(completeEnv).epicLinkField,
+    undefined,
+    "the field has a default in the client",
+  );
+  assert.throws(
+    () => loadConfig({ ...completeEnv, JIRA_EPIC_LINK_FIELD: "not a field id" }),
+    ConfigError,
+  );
+});
+
 test("a value that is not a whole number is refused", () => {
   assert.throws(
     () => loadConfig({ ...completeEnv, JIRA_STALE_DAYS: "soon" }),

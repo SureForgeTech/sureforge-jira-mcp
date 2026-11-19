@@ -72,13 +72,20 @@ const BASE_ISSUE_FIELDS = [
  *
  * The Epic Link field is asked for by its id, because no installation names
  * it `epicLink` and a site may refuse a request that names a field it does
- * not know.
+ * not know. An id that names a field the server always asks for is ignored:
+ * it cannot be the epic link, and reading it would put a wrong value into
+ * the rules.
  */
 export function issueFields(epicLinkField?: string): string {
   const field = epicLinkField?.trim();
-  return field === undefined || field === ""
-    ? BASE_ISSUE_FIELDS.join(",")
-    : [...BASE_ISSUE_FIELDS, field].join(",");
+  if (
+    field === undefined ||
+    field === "" ||
+    BASE_ISSUE_FIELDS.includes(field)
+  ) {
+    return BASE_ISSUE_FIELDS.join(",");
+  }
+  return [...BASE_ISSUE_FIELDS, field].join(",");
 }
 
 /** The number of issues one search page may return. */
@@ -149,8 +156,6 @@ export class JiraClient {
   private readonly epicLinkField?: string;
   /** The search endpoint that worked, remembered after the first page. */
   private searchPath?: string;
-  /** Whether the site accepts the Epic Link field. */
-  private epicLinkFieldRefused = false;
 
   constructor(options: JiraClientOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
@@ -233,6 +238,9 @@ export class JiraClient {
     const issues: Issue[] = [];
     const seenKeys = new Set<string>();
     let dropped = 0;
+    // Whether this listing was refused the Epic Link field. It is per
+    // listing: one refused request must not soften every later listing.
+    let epicLinkFieldRefused = false;
     let nextPageToken: string | undefined;
     let startAt = 0;
     /**
@@ -262,7 +270,7 @@ export class JiraClient {
         jql,
         maxResults: String(requested),
         fields: issueFields(
-          this.epicLinkFieldRefused ? undefined : this.epicLinkField,
+          epicLinkFieldRefused ? undefined : this.epicLinkField,
         ),
       });
 
@@ -279,13 +287,13 @@ export class JiraClient {
       } catch (error) {
         if (
           isRefusedRequest(error) &&
-          !this.epicLinkFieldRefused &&
+          !epicLinkFieldRefused &&
           this.epicLinkField !== undefined
         ) {
           // The site refused the request, most likely because of the Epic
           // Link field. Read the listing without it rather than failing:
           // the epic link is then not known, and the listing says so.
-          this.epicLinkFieldRefused = true;
+          epicLinkFieldRefused = true;
           page -= 1;
           continue;
         }
@@ -308,7 +316,7 @@ export class JiraClient {
       const rawCount = Array.isArray(rawIssues) ? rawIssues.length : 0;
       const pageIssues = normalizeIssues(
         rawIssues,
-        this.epicLinkFieldRefused ? undefined : this.epicLinkField,
+        epicLinkFieldRefused ? undefined : this.epicLinkField,
       );
       dropped += rawCount - pageIssues.length;
 
@@ -408,6 +416,8 @@ export class JiraClient {
     }
 
     const kept = issues.slice(0, limit);
+    // The issues the cap cut off are lost, so they count as dropped.
+    dropped += issues.length - kept.length;
     return {
       issues: kept,
       // An issue without a key is left out of the listing, and such an issue
@@ -419,7 +429,7 @@ export class JiraClient {
       // A site that refused the Epic Link field was read without it, so the
       // epic relation is not known and the findings that depend on the
       // absence of an epic cannot be stated as fact.
-      epicLinkKnown: !this.epicLinkFieldRefused,
+      epicLinkKnown: !epicLinkFieldRefused,
     };
   }
 

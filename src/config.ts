@@ -120,6 +120,26 @@ function readRequired(
 }
 
 /**
+ * Read the id of the Epic Link field.
+ *
+ * The id has to look like a field id. A value that is not one is refused
+ * rather than sent to the site, because a wrong value would put a wrong
+ * relation into the findings.
+ */
+function readEpicLinkField(env: Environment): string | undefined {
+  const raw = env.JIRA_EPIC_LINK_FIELD?.trim();
+  if (raw === undefined || raw === "") {
+    return undefined;
+  }
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(raw)) {
+    throw new ConfigError(
+      `JIRA_EPIC_LINK_FIELD must look like a field id, for example customfield_10014, not "${raw}".`,
+    );
+  }
+  return raw;
+}
+
+/**
  * Read the configuration from the environment.
  *
  * Throws a `ConfigError` with a message that names the variable and how to
@@ -162,10 +182,9 @@ export function loadConfig(env: Environment = process.env): JiraConfig {
       DEFAULT_TIMEOUT_MS,
       1,
     ),
-    ...(env.JIRA_EPIC_LINK_FIELD === undefined ||
-    env.JIRA_EPIC_LINK_FIELD.trim() === ""
+    ...(readEpicLinkField(env) === undefined
       ? {}
-      : { epicLinkField: env.JIRA_EPIC_LINK_FIELD.trim() }),
+      : { epicLinkField: readEpicLinkField(env) }),
   };
 }
 

@@ -114,13 +114,18 @@ function blockingRelation(
  * When the listing of the project is not complete, an issue that is not in
  * it may still point at this one, so the finding is reported as low severity
  * and says that nothing in the listing points at the issue.
+ *
+ * When the epic relation is not known, because the site refused the Epic
+ * Link field, the finding cannot say that the issue has no epic: it says the
+ * epic is not known, and it is reported as low severity.
  */
 export function findOrphanedIssues(
   issues: readonly Issue[],
-  options?: { complete?: boolean },
+  options?: { complete?: boolean; epicLinkKnown?: boolean },
 ): Finding[] {
   const pointing = issuesPointingAt(issues);
   const complete = options?.complete ?? true;
+  const epicLinkKnown = options?.epicLinkKnown ?? true;
   const findings: Finding[] = [];
 
   for (const issue of issues) {
@@ -139,15 +144,37 @@ export function findOrphanedIssues(
       category: "orphaned-issue",
       issueKey: issue.key,
       summary: issue.summary,
-      detail: complete
-        ? "The issue has no parent, no epic and no link to another issue, and no issue points at it."
-        : `The issue has no parent, no epic and no link to another issue, and no issue in the listing of ${issues.length} issues points at it.`,
-      severity: complete ? "medium" : "low",
+      detail: orphanDetail(issues.length, complete, epicLinkKnown),
+      severity: complete && epicLinkKnown ? "medium" : "low",
       relatedKeys: [],
     });
   }
 
   return findings;
+}
+
+/** The detail of an orphan finding, told apart by what is known. */
+function orphanDetail(
+  examined: number,
+  complete: boolean,
+  epicLinkKnown: boolean,
+): string {
+  const parts: string[] = ["The issue has no parent"];
+  if (epicLinkKnown) {
+    parts.push("no epic");
+  }
+  parts.push("and no link to another issue");
+  const subject = parts.join(", ");
+
+  const sentences = [
+    complete
+      ? `${subject}, and no issue points at it.`
+      : `${subject}, and no issue in the listing of ${examined} issues points at it.`,
+  ];
+  if (!epicLinkKnown) {
+    sentences.push("The epic of the issue is not known.");
+  }
+  return sentences.join(" ");
 }
 
 /**

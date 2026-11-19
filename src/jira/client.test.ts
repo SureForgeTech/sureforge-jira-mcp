@@ -420,6 +420,69 @@ test("the offset path keeps reading when no issue of a page has a key", async ()
   );
 });
 
+test("the issues the cap cut off count as dropped", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      issues: pageOfIssues(100),
+      isLast: false,
+      nextPageToken: "more",
+    }),
+  ]);
+
+  const listing = await client(fetchImpl, 40).listIssues("EX");
+  assert.equal(listing.issues.length, 40);
+  assert.equal(
+    listing.dropped,
+    60,
+    "the issues the cap cut off are lost and count as dropped",
+  );
+  assert.equal(listing.truncated, true);
+});
+
+test("the offset path stops when the site repeats a page", async () => {
+  const { fetchImpl, requests } = fakeFetch(
+    [
+      jsonResponse({ message: "not found" }, 404),
+      () =>
+        jsonResponse({
+          issues: [{ key: "EX-1", fields: {} }],
+          total: 500,
+        }),
+    ],
+    { repeatLast: true },
+  );
+
+  const listing = await client(fetchImpl, 500).listIssues("EX");
+  assert.equal(
+    requests.length,
+    3,
+    "the repeated page is not read again and again",
+  );
+  assert.equal(listing.issues.length, 1);
+  assert.equal(listing.truncated, true);
+});
+
+test("a field id that names a field the server always asks for is ignored", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ issues: [], isLast: true }),
+  ]);
+  const jira = new JiraClient({
+    baseUrl: "https://example.atlassian.net",
+    email: "reader@example.com",
+    apiToken: "example-token-value",
+    fetchImpl,
+    epicLinkField: "project",
+  });
+
+  await jira.listIssues("EX");
+  const fields = requests[0].url.searchParams.get("fields") ?? "";
+  assert.equal(
+    fields.split(",").filter((name) => name === "project").length,
+    1,
+    "the field is asked for once, as a base field",
+  );
+});
+
 test("a site that refuses the Epic Link field is read without it", async () => {
   const { fetchImpl, requests } = fakeFetch([
     jsonResponse({ message: "unknown field" }, 400),
