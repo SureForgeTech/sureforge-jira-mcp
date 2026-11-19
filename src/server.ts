@@ -126,13 +126,22 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
    */
   const loadIssues = async (
     projectKey: string,
-  ): Promise<{ issues: Issue[]; complete: boolean; listing: IssueListing }> => {
+  ): Promise<{
+    issues: Issue[];
+    covered: boolean;
+    epicLinkKnown: boolean;
+    listing: IssueListing;
+  }> => {
     const listing = await options.reader.listIssues(projectKey);
     return {
       issues: [...listing.issues],
-      // A listing that may be missing issues, and a listing that does not
-      // know the epic relation, cannot prove that an issue does not exist.
-      complete: !listing.truncated && listing.epicLinkKnown,
+      // Two separate facts: whether the listing covers the project, and
+      // whether the epic relation is known. A listing that does not cover
+      // the project cannot prove that an issue does not exist; a listing
+      // that does not know the epic relation cannot prove that an issue has
+      // no epic.
+      covered: !listing.truncated,
+      epicLinkKnown: listing.epicLinkKnown,
       listing,
     };
   };
@@ -195,10 +204,10 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete, listing } = await loadIssues(projectKey);
+      const { issues, covered, epicLinkKnown, listing } = await loadIssues(projectKey);
       const findings = findOrphanedIssues(issues, {
-        complete,
-        epicLinkKnown: listing.epicLinkKnown,
+        covered,
+        epicLinkKnown,
       });
       return {
         projectKey,
@@ -219,7 +228,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete, listing } = await loadIssues(projectKey);
+      const { issues, covered, epicLinkKnown, listing } = await loadIssues(projectKey);
       const versions = await loadVersions(projectKey);
       const findings = findMissingReleaseVersions(issues, versions);
       return {
@@ -250,7 +259,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete, listing } = await loadIssues(projectKey);
+      const { issues, covered, epicLinkKnown, listing } = await loadIssues(projectKey);
       const versions = await loadVersions(projectKey);
       const findings = findStaleBlockers(issues, versions, {
         staleDays: args.staleDays ?? options.staleDays,
@@ -285,12 +294,12 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete, listing } = await loadIssues(projectKey);
+      const { issues, covered, epicLinkKnown, listing } = await loadIssues(projectKey);
       const findings = findBrokenHierarchies(issues, {
         staleDays: options.staleDays,
         maxDepth: args.maxDepth ?? options.maxDepth,
         now: now(),
-        complete,
+        covered,
       });
       return {
         projectKey,
@@ -334,12 +343,12 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, complete, listing } = await loadIssues(projectKey);
+      const { issues, covered, epicLinkKnown, listing } = await loadIssues(projectKey);
       const versions = await loadVersions(projectKey);
       const findings = [
         ...findOrphanedIssues(issues, {
-          complete,
-          epicLinkKnown: listing.epicLinkKnown,
+          covered,
+          epicLinkKnown,
         }),
         ...findMissingReleaseVersions(issues, versions),
         ...findStaleBlockers(issues, versions, {
@@ -351,7 +360,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           staleDays: options.staleDays,
           maxDepth: args.maxDepth ?? options.maxDepth,
           now: now(),
-          complete,
+          covered,
         }),
       ];
       const summary = summarizeHealth(findings, { limit: args.limit ?? 10 });

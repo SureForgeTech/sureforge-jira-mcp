@@ -111,9 +111,9 @@ function blockingRelation(
  * reported: work that is finished and no longer linked is history, not an
  * orphan.
  *
- * When the listing of the project is not complete, an issue that is not in
- * it may still point at this one, so the finding is reported as low severity
- * and says that nothing in the listing points at the issue.
+ * When the listing of the project does not cover it, an issue that is not in
+ * the listing may still point at this one, so the finding is reported as low
+ * severity and says that nothing in the listing points at the issue.
  *
  * When the epic relation is not known, because the site refused the Epic
  * Link field, the finding cannot say that the issue has no epic: it says the
@@ -121,10 +121,13 @@ function blockingRelation(
  */
 export function findOrphanedIssues(
   issues: readonly Issue[],
-  options?: { complete?: boolean; epicLinkKnown?: boolean },
+  options?: { covered?: boolean; epicLinkKnown?: boolean },
 ): Finding[] {
   const pointing = issuesPointingAt(issues);
-  const complete = options?.complete ?? true;
+  // Two separate facts: whether the listing covers the project, and whether
+  // the epic relation is known. A finding may depend on one and not the
+  // other, and a complete listing does not mean the epic relation is known.
+  const covered = options?.covered ?? true;
   const epicLinkKnown = options?.epicLinkKnown ?? true;
   const findings: Finding[] = [];
 
@@ -144,8 +147,8 @@ export function findOrphanedIssues(
       category: "orphaned-issue",
       issueKey: issue.key,
       summary: issue.summary,
-      detail: orphanDetail(issues.length, complete, epicLinkKnown),
-      severity: complete && epicLinkKnown ? "medium" : "low",
+      detail: orphanDetail(issues.length, covered, epicLinkKnown),
+      severity: covered && epicLinkKnown ? "medium" : "low",
       relatedKeys: [],
     });
   }
@@ -156,7 +159,7 @@ export function findOrphanedIssues(
 /** The detail of an orphan finding, told apart by what is known. */
 function orphanDetail(
   examined: number,
-  complete: boolean,
+  covered: boolean,
   epicLinkKnown: boolean,
 ): string {
   const parts: string[] = ["The issue has no parent"];
@@ -167,7 +170,7 @@ function orphanDetail(
   const subject = parts.join(", ");
 
   const sentences = [
-    complete
+    covered
       ? `${subject}, and no issue points at it.`
       : `${subject}, and no issue in the listing of ${examined} issues points at it.`,
   ];
@@ -315,16 +318,16 @@ export function findStaleBlockers(
  * does not exist, a parent chain that loops, and a hierarchy that is deeper
  * than the depth limit. A cycle is reported once, not once per issue in it.
  *
- * When the listing of the project is not complete, an issue that is not in
- * it may still exist, so a missing parent or epic is reported as "not found
- * in the listing" and with a lower severity.
+ * When the listing of the project does not cover it, an issue that is not in
+ * the listing may still exist, so a missing parent or epic is reported as
+ * "not found in the listing" and with a lower severity.
  */
 export function findBrokenHierarchies(
   issues: readonly Issue[],
-  options: RuleOptions & { complete?: boolean },
+  options: RuleOptions & { covered?: boolean },
 ): Finding[] {
   const index = indexByKey(issues);
-  const complete = options.complete ?? true;
+  const covered = options.covered ?? true;
   const findings: Finding[] = [];
 
   const missing = (
@@ -332,7 +335,7 @@ export function findBrokenHierarchies(
     key: string,
     kind: "parent" | "epic",
   ): Finding => {
-    if (complete) {
+    if (covered) {
       return {
         category: "broken-hierarchy",
         issueKey: issue.key,

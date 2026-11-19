@@ -423,7 +423,49 @@ test("a listing that does not know the epic relation softens the findings", asyn
       detail: string;
     }>;
     assert.equal(findings[0].severity, "low");
-    assert.match(findings[0].detail, /no issue in the listing of 1 issues/);
+    assert.equal(
+      findings[0].detail.includes("no epic"),
+      false,
+      "the epic relation is not known",
+    );
+    assert.match(findings[0].detail, /The epic of the issue is not known/);
+    assert.match(
+      findings[0].detail,
+      /no issue points at it/,
+      "the listing covers the project, so it may say that",
+    );
+  } finally {
+    await close();
+  }
+});
+
+test("a missing parent keeps its confident wording when only the epic is unknown", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [makeIssue({ key: "EX-1", parentKey: "EX-404" })],
+        truncated: false,
+        dropped: 0,
+        examined: 1,
+        epicLinkKnown: false,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_broken_hierarchies",
+      arguments: {},
+    });
+    const findings = payload(result).findings as Array<{
+      severity: string;
+      detail: string;
+    }>;
+    assert.equal(
+      findings[0].detail,
+      "The parent EX-404 does not exist.",
+      "the listing covers the project, so the parent really is missing",
+    );
+    assert.equal(findings[0].severity, "high");
   } finally {
     await close();
   }

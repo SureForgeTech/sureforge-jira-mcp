@@ -68,24 +68,37 @@ const BASE_ISSUE_FIELDS = [
 ];
 
 /**
+ * The Epic Link field to ask for and to read.
+ *
+ * The id is site-specific, so it is configurable. An id that names a field
+ * the server always reads is refused: it cannot be the epic link, and
+ * reading it would put a wrong relation into the findings.
+ */
+export function epicLinkFieldOrUndefined(
+  field?: string,
+): string | undefined {
+  const trimmed = field?.trim();
+  if (trimmed === undefined || trimmed === "") {
+    return undefined;
+  }
+  if (BASE_ISSUE_FIELDS.includes(trimmed)) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+/**
  * The fields one request asks for.
  *
  * The Epic Link field is asked for by its id, because no installation names
  * it `epicLink` and a site may refuse a request that names a field it does
- * not know. An id that names a field the server always asks for is ignored:
- * it cannot be the epic link, and reading it would put a wrong value into
- * the rules.
+ * not know.
  */
 export function issueFields(epicLinkField?: string): string {
-  const field = epicLinkField?.trim();
-  if (
-    field === undefined ||
-    field === "" ||
-    BASE_ISSUE_FIELDS.includes(field)
-  ) {
-    return BASE_ISSUE_FIELDS.join(",");
-  }
-  return [...BASE_ISSUE_FIELDS, field].join(",");
+  const field = epicLinkFieldOrUndefined(epicLinkField);
+  return field === undefined
+    ? BASE_ISSUE_FIELDS.join(",")
+    : [...BASE_ISSUE_FIELDS, field].join(",");
 }
 
 /** The number of issues one search page may return. */
@@ -241,6 +254,10 @@ export class JiraClient {
     // Whether this listing was refused the Epic Link field. It is per
     // listing: one refused request must not soften every later listing.
     let epicLinkFieldRefused = false;
+    // The field that may hold the epic link. A field id that names a field
+    // the server always reads is refused here, so no wrong relation can
+    // reach the rules.
+    const epicLinkField = epicLinkFieldOrUndefined(this.epicLinkField);
     let nextPageToken: string | undefined;
     let startAt = 0;
     /**
@@ -270,7 +287,7 @@ export class JiraClient {
         jql,
         maxResults: String(requested),
         fields: issueFields(
-          epicLinkFieldRefused ? undefined : this.epicLinkField,
+          epicLinkFieldRefused ? undefined : epicLinkField,
         ),
       });
 
@@ -316,7 +333,7 @@ export class JiraClient {
       const rawCount = Array.isArray(rawIssues) ? rawIssues.length : 0;
       const pageIssues = normalizeIssues(
         rawIssues,
-        epicLinkFieldRefused ? undefined : this.epicLinkField,
+        epicLinkFieldRefused ? undefined : epicLinkField,
       );
       dropped += rawCount - pageIssues.length;
 
