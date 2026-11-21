@@ -189,19 +189,28 @@ test("a Jira Server deployment is reported as out of support", () => {
   assert.equal(report.deployment.type, "server");
 });
 
-test("a Cloud or Data Center deployment is reported as supported", () => {
+test("a Cloud deployment is reported as supported", () => {
   const cloud = checkInstallation({
     serverInfo: CLOUD,
     projectKey: "EXAMPLE",
     project: { key: "EXAMPLE", issueTypes: [] },
   });
   assert.equal(cloud.deployment.support, "supported");
+});
+
+test("the support of a Data Center release is unknown, because it depends on the release", () => {
   const dataCenter = checkInstallation({
     serverInfo: DATA_CENTER,
     projectKey: "EXAMPLE",
     project: { key: "EXAMPLE", issueTypes: [] },
   });
-  assert.equal(dataCenter.deployment.support, "supported");
+  assert.equal(dataCenter.deployment.support, "unknown");
+  assert.equal(dataCenter.deployment.version, "9.12.0");
+  assert.match(
+    guidanceFor("data-center").join(" "),
+    /lifecycle page/,
+    "the guidance points at the lifecycle page",
+  );
 });
 
 test("the report names the project that was asked for, even when it was not found", () => {

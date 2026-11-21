@@ -136,6 +136,24 @@ export const DEFAULT_MAX_ISSUES = 2000;
  */
 const CURSOR_SEARCH_PATH = "/rest/api/3/search/jql";
 const OFFSET_SEARCH_PATH = "/rest/api/3/search";
+const V2_SEARCH_PATH = "/rest/api/2/search";
+
+/**
+ * The search endpoints, in the order they are tried.
+ *
+ * The current endpoint pages by cursor (`nextPageToken`), the earlier ones by
+ * offset (`startAt`). The current endpoint is tried first; a site that does
+ * not know it answers 404, and a site that has retired it answers 410. The
+ * last one is the version 2 path, because Jira Data Center and Jira Server
+ * document REST API version 2 and do not serve the version 3 paths at all.
+ * The endpoint that worked is remembered, so only the first page costs an
+ * extra request.
+ */
+const SEARCH_ENDPOINTS = [
+  { path: CURSOR_SEARCH_PATH, cursor: true },
+  { path: OFFSET_SEARCH_PATH, cursor: false },
+  { path: V2_SEARCH_PATH, cursor: false },
+] as const;
 
 /**
  * Normalize a configured base URL.
@@ -182,8 +200,8 @@ export class JiraClient {
   private readonly timeoutMs: number;
   private readonly maxIssues: number;
   private readonly epicLinkField?: string;
-  /** The search endpoint that worked, remembered after the first page. */
-  private searchPath?: string;
+  /** The index of the search endpoint that worked, remembered after the first page. */
+  private searchEndpoint = 0;
 
   constructor(options: JiraClientOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
@@ -267,7 +285,19 @@ export class JiraClient {
       if (!isUnknownEndpoint(error)) {
         throw error;
       }
-      return this.request(pathEarlier);
+      try {
+        return await this.request(pathEarlier);
+      } catch (earlierError) {
+        // Both versions answered the same way, so the first failure is the
+        // one to report: it names the path the site serves on Cloud, where
+        // a missing resource is a missing resource and not a missing API
+        // version.
+        const sameStatus =
+          error instanceof JiraError &&
+          earlierError instanceof JiraError &&
+          error.status === earlierError.status;
+        throw sameStatus ? error : earlierError;
+      }
     }
   }
 
@@ -327,8 +357,9 @@ export class JiraClient {
         ),
       });
 
-      const path = this.searchPath ?? CURSOR_SEARCH_PATH;
-      if (path === OFFSET_SEARCH_PATH) {
+      const endpoint = SEARCH_ENDPOINTS[this.searchEndpoint];
+      const path = endpoint.path;
+      if (!endpoint.cursor) {
         search.set("startAt", String(startAt));
       } else if (nextPageToken !== undefined) {
         search.set("nextPageToken", nextPageToken);
@@ -349,21 +380,16 @@ export class JiraClient {
           page -= 1;
           continue;
         }
-        if (this.searchPath !== undefined) {
-          throw error;
-        }
-        if (isUnknownEndpoint(error)) {
-          // The site does not know the current endpoint: use the earlier
-          // one from here on, and try this page again against it. The page
-          // is not counted twice.
-          this.searchPath = OFFSET_SEARCH_PATH;
+        if (isUnknownEndpoint(error) && this.searchEndpoint + 1 < SEARCH_ENDPOINTS.length) {
+          // The site does not know this endpoint: try the next one from here
+          // on, and try this page again against it. The page is not counted
+          // twice.
+          this.searchEndpoint += 1;
           page -= 1;
           continue;
         }
         throw error;
       }
-      this.searchPath = path;
-
       const rawIssues = (payload as { issues?: unknown } | undefined)?.issues;
       const rawCount = Array.isArray(rawIssues) ? rawIssues.length : 0;
       // A field that holds a value which cannot be an epic relation means
@@ -409,7 +435,7 @@ export class JiraClient {
 
       let sourceHasMore: boolean;
       let unreadable = false;
-      if (path === CURSOR_SEARCH_PATH) {
+      if (endpoint.cursor) {
         const isLast = pagePayload?.isLast === true;
         const token =
           typeof pagePayload?.nextPageToken === "string"
@@ -555,8 +581,10 @@ export class JiraClient {
 
   /** List the release versions of a project. */
   async listVersions(projectKey: string): Promise<ProjectVersion[]> {
-    const payload = await this.request(
-      `/rest/api/3/project/${encodeURIComponent(projectKey)}/versions`,
+    const key = encodeURIComponent(projectKey);
+    const payload = await this.requestVersioned(
+      `/rest/api/3/project/${key}/versions`,
+      `/rest/api/2/project/${key}/versions`,
     );
     return normalizeVersions(payload);
   }

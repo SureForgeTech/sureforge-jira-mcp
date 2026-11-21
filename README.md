@@ -49,10 +49,12 @@ instead.
 - **the support status of the deployment** and **the guidance that holds for
   it**: on Cloud, Atlassian runs the instance and the current search endpoint
   is `/rest/api/3/search/jql`; on Data Center the organisation runs the
-  instance and Atlassian documents REST API version 2 there, so a Data Center
-  instance that answers 404 for a version 3 path is read on version 2; on Jira
-  Server, whose support Atlassian ended in February 2024, the instance
-  receives no fixes from Atlassian.
+  instance and Atlassian documents REST API version 2 there, so the server
+  reads the earlier version when an instance answers 404 for a version 3 path;
+  on Jira Server, whose support Atlassian ended in February 2024, the
+  instance receives no fixes from Atlassian. The support of a Data Center
+  release depends on that release, so the report says `unknown` and names the
+  version it read.
 
 The report is `healthy` when the instance reports no failing health check and
 the project can be read, and `needs-attention` otherwise. A deployment Atlassian

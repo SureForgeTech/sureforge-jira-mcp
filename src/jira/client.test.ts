@@ -998,3 +998,44 @@ test("the project key is encoded in the path", async () => {
   await client(fetchImpl).getProject("A/B?x=1");
   assert.equal(requests[0].url.pathname, "/rest/api/3/project/A%2FB%3Fx%3D1");
 });
+
+test("a site that serves only version 2 is read on the version 2 search path", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }], total: 1 }),
+  ]);
+
+  const listing = await client(fetchImpl).listIssues("EX");
+  assert.equal(listing.issues.length, 1);
+  assert.equal(requests[0].url.pathname, "/rest/api/3/search/jql");
+  assert.equal(requests[1].url.pathname, "/rest/api/3/search");
+  assert.equal(requests[2].url.pathname, "/rest/api/2/search");
+});
+
+test("the release versions are read on the earlier version when the site has none", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse([{ name: "1.0.0", released: true }]),
+  ]);
+
+  const versions = await client(fetchImpl).listVersions("EX");
+  assert.equal(versions.length, 1);
+  assert.equal(requests[0].url.pathname, "/rest/api/3/project/EX/versions");
+  assert.equal(requests[1].url.pathname, "/rest/api/2/project/EX/versions");
+});
+
+test("a resource that is missing is reported against the path the site serves", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+  ]);
+
+  await assert.rejects(
+    () => client(fetchImpl).getProject("MISSING"),
+    (error: unknown) =>
+      error instanceof JiraError &&
+      error.status === 404 &&
+      error.message.includes("/rest/api/3/project/MISSING"),
+  );
+});

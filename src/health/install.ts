@@ -111,11 +111,21 @@ export function deploymentTypeOf(serverInfo: ServerInfo): DeploymentType {
  * The facts are the ones Atlassian documents: who runs the instance, who
  * upgrades it, and which parts of the REST API it serves.
  */
+/**
+ * Whether Atlassian still supports the deployment.
+ *
+ * Cloud is supported, because Atlassian runs it. Jira Server is not, since
+ * Atlassian ended its support in February 2024. The support of a Data
+ * Center release depends on that release, and this server does not carry
+ * the lifecycle table, so it reports `unknown` and names the version the
+ * instance reported.
+ */
 export function supportOf(deployment: DeploymentType): SupportStatus {
   switch (deployment) {
     case "cloud":
-    case "data-center":
       return "supported";
+    case "data-center":
+      return "unknown";
     case "server":
       return "end-of-support";
     case "unknown":
@@ -134,6 +144,7 @@ export function guidanceFor(deployment: DeploymentType): string[] {
       return [
         "This instance is run by your organisation: the version is the one to plan upgrades for.",
         "Jira Data Center documents REST API version 2; a Data Center instance answers 404 for a version 3 path, so this server reads the earlier version there.",
+        "The support of a Data Center release depends on that release: check the Atlassian lifecycle page for the version this instance reported.",
       ];
     case "server":
       return [
