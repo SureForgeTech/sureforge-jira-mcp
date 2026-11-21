@@ -56,8 +56,10 @@ instead.
   release depends on that release, so the report says `unknown` and names the
   version it read.
 
-The report is `healthy` when the instance reports no failing health check and
-the project can be read, and `needs-attention` otherwise. A deployment Atlassian
+The report is `healthy` when the instance reports no failing health check,
+the project can be read, and the instance said something about itself - a
+deployment type or a version. It is `needs-attention` otherwise, because a
+report without instance evidence cannot call an installation healthy. A deployment Atlassian
 no longer supports is reported as `end-of-support`; that is a fact about the
 deployment, not a fault in the instance, so it does not change the status.
 

@@ -106,12 +106,6 @@ export function deploymentTypeOf(serverInfo: ServerInfo): DeploymentType {
 }
 
 /**
- * The guidance that holds for a deployment.
- *
- * The facts are the ones Atlassian documents: who runs the instance, who
- * upgrades it, and which parts of the REST API it serves.
- */
-/**
  * Whether Atlassian still supports the deployment.
  *
  * Cloud is supported, because Atlassian runs it. Jira Server is not, since
@@ -133,6 +127,12 @@ export function supportOf(deployment: DeploymentType): SupportStatus {
   }
 }
 
+/**
+ * The guidance that holds for a deployment.
+ *
+ * The facts are the ones Atlassian documents: who runs the instance, who
+ * upgrades it, and which parts of the REST API it serves.
+ */
 export function guidanceFor(deployment: DeploymentType): string[] {
   switch (deployment) {
     case "cloud":
@@ -154,7 +154,7 @@ export function guidanceFor(deployment: DeploymentType): string[] {
     case "unknown":
       return [
         "The instance did not report a deployment type this server knows, so no deployment guidance can be given.",
-        "An instance that does not report its version or its deployment type cannot be checked for support status.",
+        "The support status of the deployment cannot be established without a known deployment type.",
       ];
   }
 }

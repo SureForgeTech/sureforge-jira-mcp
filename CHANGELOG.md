@@ -20,7 +20,9 @@ project uses semantic versioning.
   never carries a credential into a message.
 - The client falls back to the REST API version 2 paths when a site does not
   know the current version, so Jira Data Center and Jira Server, which
-  document version 2, are read as well.
+  document version 2, are read as well. A site that knows none of the
+  search paths now answers the error of the last path tried, the version 2
+  one.
 - The configuration comes from the environment only: the site, the account,
   the API token, the project and the two thresholds. The token is redacted
   from every message.

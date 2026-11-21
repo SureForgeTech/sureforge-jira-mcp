@@ -306,6 +306,8 @@ export function normalizeServerInfo(raw: unknown): ServerInfo {
       )
     : undefined;
 
+  const healthChecks = normalizeHealthChecks(info.healthChecks);
+
   return {
     ...(text(info.baseUrl) === undefined ? {} : { baseUrl: text(info.baseUrl) }),
     ...(text(info.version) === undefined ? {} : { version: text(info.version) }),
@@ -319,11 +321,11 @@ export function normalizeServerInfo(raw: unknown): ServerInfo {
     ...(text(info.serverTitle) === undefined
       ? {}
       : { serverTitle: text(info.serverTitle) }),
-    healthChecks: normalizeHealthChecks(info.healthChecks),
+    healthChecks,
     // The flag means the instance reported health check results. Jira Cloud
     // answers with an empty list, because the field is deprecated there, so
     // an empty list is no evidence that the instance was checked.
-    healthChecksReported: normalizeHealthChecks(info.healthChecks).length > 0,
+    healthChecksReported: healthChecks.length > 0,
   };
 }
 
