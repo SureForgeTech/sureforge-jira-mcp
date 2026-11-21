@@ -78,12 +78,37 @@ function startMockJira() {
     seen.authorized = true;
 
     response.writeHead(200, { "content-type": "application/json" });
+    if (request.url?.includes("/serverInfo")) {
+      response.end(
+        JSON.stringify({
+          baseUrl: "http://127.0.0.1:0",
+          version: "1001.0.0",
+          versionNumbers: [1001, 0, 0],
+          deploymentType: "Cloud",
+          buildNumber: 1001,
+          serverTitle: "Jira",
+          healthChecks: [],
+        }),
+      );
+      return;
+    }
     if (request.url?.includes("/versions")) {
       response.end(
         JSON.stringify([
           { name: "1.0.0", released: true, releaseDate: "2026-02-01" },
           { name: "1.1.0", released: false },
         ]),
+      );
+      return;
+    }
+    if (request.url?.includes("/project/")) {
+      response.end(
+        JSON.stringify({
+          key: "EXAMPLE",
+          name: "Example project",
+          projectTypeKey: "software",
+          issueTypes: [{ name: "Task" }],
+        }),
       );
       return;
     }
@@ -145,6 +170,7 @@ test("the built server answers the health tools over stdio", async (t) => {
   assert.deepEqual(
     tools.tools.map((tool) => tool.name).sort(),
     [
+      "jira_check_installation",
       "jira_find_broken_hierarchies",
       "jira_find_missing_release_versions",
       "jira_find_orphaned_issues",
@@ -152,6 +178,13 @@ test("the built server answers the health tools over stdio", async (t) => {
       "jira_health_summary",
     ],
   );
+
+  const installation = payload(
+    await client.callTool({ name: "jira_check_installation", arguments: {} }),
+  );
+  assert.equal(installation.status, "healthy");
+  assert.equal(installation.deployment.type, "cloud");
+  assert.equal(installation.project.found, true);
 
   const orphaned = payload(
     await client.callTool({ name: "jira_find_orphaned_issues", arguments: {} }),

@@ -6,7 +6,14 @@
  * not fail because one issue carries an unexpected field. An issue without a
  * key cannot be reported on at all, so it is dropped.
  */
-import type { Issue, IssueLink, ProjectVersion } from "./types.js";
+import type {
+  InstanceHealthCheck,
+  Issue,
+  IssueLink,
+  ProjectSummary,
+  ProjectVersion,
+  ServerInfo,
+} from "./types.js";
 
 /** The REST shape of the fields this server reads. */
 interface RawIssue {
@@ -269,6 +276,122 @@ export function normalizeVersion(raw: unknown): ProjectVersion | undefined {
       ? {}
       : { releaseDate: text(version.releaseDate) }),
     archived: version.archived === true,
+  };
+}
+
+/**
+ * Normalize what the instance reports about itself.
+ *
+ * Every field is optional: a site may answer with less than the documented
+ * shape, and the report has to say what it knows rather than fail.
+ */
+export function normalizeServerInfo(raw: unknown): ServerInfo {
+  if (raw === null || typeof raw !== "object") {
+    return { healthChecks: [], healthChecksReported: false };
+  }
+  const info = raw as {
+    baseUrl?: unknown;
+    version?: unknown;
+    versionNumbers?: unknown;
+    deploymentType?: unknown;
+    buildNumber?: unknown;
+    serverTitle?: unknown;
+    healthChecks?: unknown;
+  };
+
+  const versionNumbers = Array.isArray(info.versionNumbers)
+    ? info.versionNumbers.filter(
+        (value): value is number =>
+          typeof value === "number" && Number.isFinite(value),
+      )
+    : undefined;
+
+  const healthChecks = normalizeHealthChecks(info.healthChecks);
+
+  return {
+    ...(text(info.baseUrl) === undefined ? {} : { baseUrl: text(info.baseUrl) }),
+    ...(text(info.version) === undefined ? {} : { version: text(info.version) }),
+    ...(versionNumbers === undefined ? {} : { versionNumbers }),
+    ...(text(info.deploymentType) === undefined
+      ? {}
+      : { deploymentType: text(info.deploymentType) }),
+    ...(typeof info.buildNumber === "number" && Number.isFinite(info.buildNumber)
+      ? { buildNumber: info.buildNumber }
+      : {}),
+    ...(text(info.serverTitle) === undefined
+      ? {}
+      : { serverTitle: text(info.serverTitle) }),
+    healthChecks,
+    // The flag means the instance reported health check results. Jira Cloud
+    // answers with an empty list, because the field is deprecated there, so
+    // an empty list is no evidence that the instance was checked.
+    healthChecksReported: healthChecks.length > 0,
+  };
+}
+
+/** Normalize the health checks the instance reports about itself. */
+export function normalizeHealthChecks(raw: unknown): InstanceHealthCheck[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const checks: InstanceHealthCheck[] = [];
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== "object") {
+      continue;
+    }
+    const check = entry as { name?: unknown; description?: unknown; passed?: unknown };
+    const name = text(check.name);
+    if (name === undefined) {
+      continue;
+    }
+    checks.push({
+      name,
+      ...(text(check.description) === undefined
+        ? {}
+        : { description: text(check.description) }),
+      // A result the instance did not state is not a failed check.
+      ...(typeof check.passed === "boolean" ? { passed: check.passed } : {}),
+    });
+  }
+  return checks;
+}
+
+/**
+ * Normalize the part of a project the health report needs.
+ *
+ * Returns `undefined` for a payload that names no project, so the caller can
+ * tell "the project was not found" from "the project has no name".
+ */
+export function normalizeProject(raw: unknown): ProjectSummary | undefined {
+  if (raw === null || typeof raw !== "object") {
+    return undefined;
+  }
+  const project = raw as {
+    key?: unknown;
+    name?: unknown;
+    projectTypeKey?: unknown;
+    issueTypes?: unknown;
+  };
+  const key = text(project.key);
+  if (key === undefined) {
+    return undefined;
+  }
+  const issueTypes = Array.isArray(project.issueTypes)
+    ? project.issueTypes
+        .map((issueType) =>
+          issueType !== null && typeof issueType === "object"
+            ? text((issueType as { name?: unknown }).name)
+            : undefined,
+        )
+        .filter((name): name is string => name !== undefined)
+    : [];
+  return {
+    key,
+    ...(text(project.name) === undefined ? {} : { name: text(project.name) }),
+    ...(text(project.projectTypeKey) === undefined
+      ? {}
+      : { projectTypeKey: text(project.projectTypeKey) }),
+    issueTypes,
   };
 }
 

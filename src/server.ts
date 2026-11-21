@@ -1,7 +1,7 @@
 /**
  * The MCP server.
  *
- * The server publishes five read-only tools over the health rules: one per
+ * The server publishes six read-only tools over the health rules: one per
  * problem the product names, plus the aggregate summary. Every tool reads
  * the project through the client and returns findings as JSON.
  */
@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AnySchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
 import { redact } from "./config.js";
+import { checkInstallation } from "./health/install.js";
 import {
   findBrokenHierarchies,
   findMissingReleaseVersions,
@@ -16,7 +17,14 @@ import {
   findStaleBlockers,
 } from "./health/rules.js";
 import { sortFindings, summarizeHealth } from "./health/summary.js";
-import type { Finding, Issue, IssueListing, ProjectVersion } from "./jira/types.js";
+import type {
+  Finding,
+  Issue,
+  IssueListing,
+  ProjectSummary,
+  ProjectVersion,
+  ServerInfo,
+} from "./jira/types.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./version.js";
 
 /** The part of the Jira client the server uses. */
@@ -26,6 +34,10 @@ export interface JiraReader {
     options?: { jql?: string; maxIssues?: number },
   ): Promise<IssueListing>;
   listVersions(projectKey: string): Promise<ProjectVersion[]>;
+  /** What the instance reports about itself. */
+  getServerInfo(): Promise<ServerInfo>;
+  /** The part of a project the installation report needs. */
+  getProject(projectKey: string): Promise<ProjectSummary>;
 }
 
 /** How the server is set up. */
@@ -51,6 +63,7 @@ export const TOOL_NAMES = [
   "jira_find_stale_blockers",
   "jira_find_broken_hierarchies",
   "jira_health_summary",
+  "jira_check_installation",
 ] as const;
 
 /** One tool name. */
@@ -311,6 +324,47 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
         ...listingReport(issues, listing),
         findings: ranked(findings, args.limit ?? 100),
       };
+    },
+  );
+
+  register(
+    "jira_check_installation",
+    {
+      title: "Check the health of the installation",
+      description:
+        "Report the health of the Jira installation: the deployment type and version of the instance, the health checks the instance reports about itself, whether the project can be read, and the guidance that holds for that deployment.",
+      // The report has no findings to cap, so it takes no limit.
+      inputSchema: z.object({
+        projectKey: z
+          .string()
+          .optional()
+          .describe("The project to report on. Defaults to the configured project."),
+      }),
+    },
+    async (args) => {
+      const projectKey = projectOf(args);
+      const serverInfo = await options.reader.getServerInfo();
+
+      // A project that cannot be read is a finding of the report, not a
+      // failure of the tool: the rest of the installation is still worth
+      // reporting.
+      let project: ProjectSummary | undefined;
+      let projectError: string | undefined;
+      try {
+        project = await options.reader.getProject(projectKey);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // The message travels in a tool result, so it goes through the same
+        // redaction as every other message.
+        projectError = redact(message, secrets);
+      }
+
+      return checkInstallation({
+        serverInfo,
+        projectKey,
+        project,
+        projectError,
+      });
     },
   );
 

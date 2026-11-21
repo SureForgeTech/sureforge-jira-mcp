@@ -13,13 +13,15 @@ The server only reads. It never changes an issue, and it never writes to Jira.
 | `jira_find_stale_blockers` | Open issues that block other issues and have not been updated for the staleness threshold or longer. A blocker of work that already ships is reported as high severity. |
 | `jira_find_broken_hierarchies` | Broken issue hierarchies: a parent or epic that does not exist, a parent chain that loops, and a hierarchy deeper than the depth limit. |
 | `jira_health_summary` | The aggregate view: the number of findings per category and severity, the findings to look at first, and a status of `healthy` or `needs-attention`. |
+| `jira_check_installation` | The health of the installation: the deployment type and version of the instance, the health checks the instance reports about itself, whether the project can be read, and the guidance that holds for that deployment. |
 
-Every tool takes an optional `projectKey`, an optional `limit`, and the
-thresholds that apply to it (`staleDays`, `maxDepth`). The findings are
-ordered worst first.
+Every tool that reports findings takes an optional `projectKey`, an optional
+`limit`, and the thresholds that apply to it (`staleDays`, `maxDepth`). The
+findings are ordered worst first. `jira_check_installation` reports on the
+installation rather than on findings, so it takes only `projectKey`.
 
-Every tool result carries `issuesExamined`, the number of issues it looked
-at. A listing reads at most 2000 issues per project. When the listing may be
+Every tool that reads issues carries `issuesExamined`, the number of issues
+it looked at. A listing reads at most 2000 issues per project. When the listing may be
 missing issues the result carries `truncated: true`, and `issuesDropped`
 names how many issues the listing left out - the ones the site returned
 without a key, and the ones the issue cap cut off. A parent or epic that
@@ -32,6 +34,34 @@ or when the field holds a value that cannot be an epic relation - free text, a
 number, a list - the result carries `epicLinkKnown: false`, and the findings
 that would state that an issue has no epic are hedged and lower in severity
 instead.
+
+## Deployment and installation
+
+`jira_check_installation` reports the installation the server is talking to:
+
+- **the deployment type and version** the instance reports for itself, with the
+  build number and the title of the instance;
+- **the health checks the instance reports about itself**, and the ones that did
+  not pass. Jira Cloud does not report them any more - the field is deprecated
+  there - so the report says `healthChecksReported: false` rather than
+  pretending the instance was checked;
+- **whether the configured project can be read** by the configured account;
+- **the support status of the deployment** and **the guidance that holds for
+  it**: on Cloud, Atlassian runs the instance and the current search endpoint
+  is `/rest/api/3/search/jql`; on Data Center the organisation runs the
+  instance and Atlassian documents REST API version 2 there, so the server
+  reads the earlier version when an instance answers 404 for a version 3 path;
+  on Jira Server, whose support Atlassian ended in February 2024, the
+  instance receives no fixes from Atlassian. The support of a Data Center
+  release depends on that release, so the report says `unknown` and names the
+  version it read.
+
+The report is `healthy` when the instance reports no failing health check,
+the project can be read, and the instance said something about itself - a
+deployment type or a version. It is `needs-attention` otherwise, because a
+report without instance evidence cannot call an installation healthy. A deployment Atlassian
+no longer supports is reported as `end-of-support`; that is a fact about the
+deployment, not a fault in the instance, so it does not change the status.
 
 ## Configuration
 

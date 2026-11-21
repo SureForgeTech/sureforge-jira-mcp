@@ -685,6 +685,76 @@ test("a body that is not JSON is reported as a Jira error", async () => {
   );
 });
 
+test("the server info is read from the instance", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({
+      baseUrl: "https://example.atlassian.net",
+      version: "1001.0.0",
+      versionNumbers: [1001, 0, 0],
+      deploymentType: "Cloud",
+      buildNumber: 1001,
+      serverTitle: "Jira",
+      healthChecks: [{ name: "Database", passed: true }],
+    }),
+  ]);
+
+  const info = await client(fetchImpl).getServerInfo();
+  assert.equal(info.deploymentType, "Cloud");
+  assert.equal(info.version, "1001.0.0");
+  assert.deepEqual([...(info.versionNumbers ?? [])], [1001, 0, 0]);
+  assert.equal(info.healthChecks.length, 1);
+  assert.equal(info.healthChecks[0].passed, true);
+  assert.equal(requests[0].url.pathname, "/rest/api/3/serverInfo");
+});
+
+test("a project that cannot be read is reported with its status", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+  ]);
+
+  await assert.rejects(
+    () => client(fetchImpl).getProject("EXAMPLE"),
+    (error: unknown) =>
+      error instanceof JiraError && error.status === 404,
+  );
+  assert.equal(requests[0].url.pathname, "/rest/api/3/project/EXAMPLE");
+});
+
+test("a site that does not know the current API version is read on the earlier one", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ errorMessages: ["Not found"] }, 404),
+    jsonResponse({
+      baseUrl: "https://example.atlassian.net",
+      version: "9.12.0",
+      deploymentType: "Data Center",
+      healthChecks: [],
+    }),
+  ]);
+
+  const info = await client(fetchImpl).getServerInfo();
+  assert.equal(info.deploymentType, "Data Center");
+  assert.equal(requests[0].url.pathname, "/rest/api/3/serverInfo");
+  assert.equal(requests[1].url.pathname, "/rest/api/2/serverInfo");
+});
+
+test("the project is read with its type and issue types", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      key: "EXAMPLE",
+      name: "Example project",
+      projectTypeKey: "software",
+      issueTypes: [{ name: "Task" }, { name: "Bug" }],
+    }),
+  ]);
+
+  const project = await client(fetchImpl).getProject("EXAMPLE");
+  assert.equal(project.key, "EXAMPLE");
+  assert.equal(project.name, "Example project");
+  assert.equal(project.projectTypeKey, "software");
+  assert.deepEqual([...project.issueTypes], ["Task", "Bug"]);
+});
+
 test("listing versions reads the project versions", async () => {
   const { fetchImpl, requests } = fakeFetch([
     jsonResponse([
@@ -908,4 +978,64 @@ test("a field whose value is not a key at all leaves the relation unknown", asyn
       `a value of ${JSON.stringify(value)} cannot be an epic relation`,
     );
   }
+});
+
+test("a project that cannot be read is read on the earlier API version too", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+  ]);
+
+  await assert.rejects(() => client(fetchImpl).getProject("EXAMPLE"), JiraError);
+  assert.equal(requests[1].url.pathname, "/rest/api/2/project/EXAMPLE");
+});
+
+test("the project key is encoded in the path", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ key: "A/B", name: "Odd key", issueTypes: [] }),
+  ]);
+
+  await client(fetchImpl).getProject("A/B?x=1");
+  assert.equal(requests[0].url.pathname, "/rest/api/3/project/A%2FB%3Fx%3D1");
+});
+
+test("a site that serves only version 2 is read on the version 2 search path", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse({ issues: [{ key: "EX-1", fields: {} }], total: 1 }),
+  ]);
+
+  const listing = await client(fetchImpl).listIssues("EX");
+  assert.equal(listing.issues.length, 1);
+  assert.equal(requests[0].url.pathname, "/rest/api/3/search/jql");
+  assert.equal(requests[1].url.pathname, "/rest/api/3/search");
+  assert.equal(requests[2].url.pathname, "/rest/api/2/search");
+});
+
+test("the release versions are read on the earlier version when the site has none", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ message: "not found" }, 404),
+    jsonResponse([{ name: "1.0.0", released: true }]),
+  ]);
+
+  const versions = await client(fetchImpl).listVersions("EX");
+  assert.equal(versions.length, 1);
+  assert.equal(requests[0].url.pathname, "/rest/api/3/project/EX/versions");
+  assert.equal(requests[1].url.pathname, "/rest/api/2/project/EX/versions");
+});
+
+test("a resource that is missing is reported against the path the site serves", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+  ]);
+
+  await assert.rejects(
+    () => client(fetchImpl).getProject("MISSING"),
+    (error: unknown) =>
+      error instanceof JiraError &&
+      error.status === 404 &&
+      error.message.includes("/rest/api/3/project/MISSING"),
+  );
 });
