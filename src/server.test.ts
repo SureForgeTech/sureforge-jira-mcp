@@ -3,7 +3,12 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createJiraServer, TOOL_NAMES, type JiraReader } from "./server.js";
-import type { Issue, ProjectVersion } from "./jira/types.js";
+import type {
+  Issue,
+  ProjectSummary,
+  ProjectVersion,
+  ServerInfo,
+} from "./jira/types.js";
 import { EXAMPLE_VERSIONS, makeIssue, NOW } from "./testing/fixtures.js";
 
 const ISSUES: Issue[] = [
@@ -19,6 +24,24 @@ const ISSUES: Issue[] = [
   makeIssue({ key: "EX-6", fixVersions: ["9.9.9"] }),
 ];
 
+/** The instance the example fixtures describe. */
+const EXAMPLE_SERVER_INFO: ServerInfo = {
+  baseUrl: "https://example.atlassian.net",
+  version: "1001.0.0",
+  deploymentType: "Cloud",
+  buildNumber: 1001,
+  serverTitle: "Jira",
+  healthChecks: [],
+};
+
+/** The project the example fixtures describe. */
+const EXAMPLE_PROJECT: ProjectSummary = {
+  key: "EXAMPLE",
+  name: "Example project",
+  projectTypeKey: "software",
+  issueTypes: ["Task", "Bug", "Epic"],
+};
+
 /** A reader that answers from the example fixtures. */
 function reader(overrides?: Partial<JiraReader>): JiraReader {
   return {
@@ -29,6 +52,8 @@ function reader(overrides?: Partial<JiraReader>): JiraReader {
       examined: ISSUES.length,
     }),
     listVersions: async (): Promise<ProjectVersion[]> => EXAMPLE_VERSIONS,
+    getServerInfo: async (): Promise<ServerInfo> => EXAMPLE_SERVER_INFO,
+    getProject: async (): Promise<ProjectSummary> => EXAMPLE_PROJECT,
     ...overrides,
   };
 }
@@ -69,7 +94,7 @@ function payload(result: unknown): Record<string, unknown> {
   return JSON.parse(content[0].text) as Record<string, unknown>;
 }
 
-test("the server publishes exactly the five health tools", async () => {
+test("the server publishes exactly the health tools", async () => {
   const { client, close } = await connect(reader());
   try {
     const tools = await client.listTools();
@@ -350,6 +375,53 @@ test("a truncated listing softens the orphan finding", async () => {
     }>;
     assert.equal(findings[0].severity, "low");
     assert.match(findings[0].detail, /no issue in the listing of 1 issues/);
+  } finally {
+    await close();
+  }
+});
+
+test("the installation tool reports the deployment and the project", async () => {
+  const { client, close } = await connect(reader());
+  try {
+    const result = await client.callTool({
+      name: "jira_check_installation",
+      arguments: {},
+    });
+    const body = payload(result);
+    const deployment = body.deployment as { type: string; reportedType?: string };
+    const project = body.project as { found: boolean; key: string };
+    assert.equal(body.status, "healthy");
+    assert.equal(deployment.type, "cloud");
+    assert.equal(deployment.reportedType, "Cloud");
+    assert.equal(project.found, true);
+    assert.equal(project.key, "EXAMPLE");
+    assert.ok(Array.isArray(body.guidance));
+    assert.ok((body.guidance as string[]).length > 0);
+  } finally {
+    await close();
+  }
+});
+
+test("the installation tool still reports when the project cannot be read", async () => {
+  const { client, close } = await connect(
+    reader({
+      getProject: async () => {
+        throw new Error("Jira answered 404 Not Found for /rest/api/3/project/EXAMPLE.");
+      },
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_check_installation",
+      arguments: {},
+    });
+    const body = payload(result);
+    const deployment = body.deployment as { type: string };
+    const project = body.project as { found: boolean; error?: string };
+    assert.equal(body.status, "needs-attention");
+    assert.equal(project.found, false);
+    assert.match(project.error ?? "", /404/);
+    assert.equal(deployment.type, "cloud");
   } finally {
     await close();
   }

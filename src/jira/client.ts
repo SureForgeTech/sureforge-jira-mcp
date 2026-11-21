@@ -9,9 +9,17 @@
 import {
   hasUnusableEpicValue,
   normalizeIssues,
+  normalizeProject,
+  normalizeServerInfo,
   normalizeVersions,
 } from "./normalize.js";
-import type { Issue, IssueListing, ProjectVersion } from "./types.js";
+import type {
+  Issue,
+  IssueListing,
+  ProjectSummary,
+  ProjectVersion,
+  ServerInfo,
+} from "./types.js";
 
 /** An error raised by the Jira API or by the transport around it. */
 export class JiraError extends Error {
@@ -485,6 +493,37 @@ export class JiraClient {
       // absence of an epic cannot be stated as fact.
       epicLinkKnown: !epicLinkFieldRefused && !epicValueUnreadable,
     };
+  }
+
+  /**
+   * Read what the instance reports about itself.
+   *
+   * The endpoint answers with the deployment type, the version and the health
+   * checks the instance runs against itself.
+   */
+  async getServerInfo(): Promise<ServerInfo> {
+    const payload = await this.request("/rest/api/3/serverInfo");
+    return normalizeServerInfo(payload);
+  }
+
+  /**
+   * Read the part of a project the health report needs.
+   *
+   * A project that does not exist, or that the account may not read, answers
+   * with an error status; the caller turns that into a finding.
+   */
+  async getProject(projectKey: string): Promise<ProjectSummary> {
+    const payload = await this.request(
+      `/rest/api/3/project/${encodeURIComponent(projectKey)}`,
+    );
+    const project = normalizeProject(payload);
+    if (project === undefined) {
+      throw new JiraError(
+        `Jira answered without naming the project ${projectKey}.`,
+        200,
+      );
+    }
+    return project;
   }
 
   /** List the release versions of a project. */

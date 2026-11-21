@@ -104,6 +104,46 @@ export interface IssueListing {
   readonly epicLinkKnown: boolean;
 }
 
+/** One health check the instance reports about itself. */
+export interface InstanceHealthCheck {
+  /** The name of the check, for example `Database`. */
+  readonly name: string;
+  /** What the check looked at, when the instance says so. */
+  readonly description?: string;
+  /** Whether the check passed. */
+  readonly passed: boolean;
+}
+
+/** What the Jira instance reports about itself. */
+export interface ServerInfo {
+  /** The address the instance gives for itself. */
+  readonly baseUrl?: string;
+  /** The version of Jira. */
+  readonly version?: string;
+  /** The version numbers of Jira, for example `[9, 4, 0]`. */
+  readonly versionNumbers?: readonly number[];
+  /** The deployment type, for example `Cloud`, `Data Center` or `Server`. */
+  readonly deploymentType?: string;
+  /** The build number of the instance. */
+  readonly buildNumber?: number;
+  /** The title of the instance. */
+  readonly serverTitle?: string;
+  /** The health checks the instance reports about itself. */
+  readonly healthChecks: readonly InstanceHealthCheck[];
+}
+
+/** The part of a project the health report needs. */
+export interface ProjectSummary {
+  /** The key of the project, for example `EXAMPLE`. */
+  readonly key: string;
+  /** The name of the project. */
+  readonly name?: string;
+  /** The type of the project, for example `software` or `service_desk`. */
+  readonly projectTypeKey?: string;
+  /** The issue types the project offers, by name. */
+  readonly issueTypes: readonly string[];
+}
+
 /** The categories of finding the health rules produce. */
 export type FindingCategory =
   | "orphaned-issue"

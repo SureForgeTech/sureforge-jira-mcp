@@ -24,6 +24,11 @@ project uses semantic versioning.
   default. A site that refuses the field is read without it, and the result
   says that the epic relation is unknown.
 
+- `jira_check_installation` reports the health of the installation: the
+  deployment type and version of the instance, the health checks the instance
+  reports about itself, whether the project can be read, and the guidance that
+  holds for that deployment.
+
 ### Changed
 
 - A listing that may be missing issues reports itself as such: the findings

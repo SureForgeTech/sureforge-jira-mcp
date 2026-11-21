@@ -13,6 +13,7 @@ The server only reads. It never changes an issue, and it never writes to Jira.
 | `jira_find_stale_blockers` | Open issues that block other issues and have not been updated for the staleness threshold or longer. A blocker of work that already ships is reported as high severity. |
 | `jira_find_broken_hierarchies` | Broken issue hierarchies: a parent or epic that does not exist, a parent chain that loops, and a hierarchy deeper than the depth limit. |
 | `jira_health_summary` | The aggregate view: the number of findings per category and severity, the findings to look at first, and a status of `healthy` or `needs-attention`. |
+| `jira_check_installation` | The health of the installation: the deployment type and version of the instance, the health checks the instance reports about itself, whether the project can be read, and the guidance that holds for that deployment. |
 
 Every tool takes an optional `projectKey`, an optional `limit`, and the
 thresholds that apply to it (`staleDays`, `maxDepth`). The findings are
@@ -32,6 +33,24 @@ or when the field holds a value that cannot be an epic relation - free text, a
 number, a list - the result carries `epicLinkKnown: false`, and the findings
 that would state that an issue has no epic are hedged and lower in severity
 instead.
+
+## Deployment and installation
+
+`jira_check_installation` reports the installation the server is talking to:
+
+- **the deployment type and version** the instance reports for itself, with the
+  build number and the title of the instance;
+- **the health checks the instance runs against itself**, and the ones that did
+  not pass;
+- **whether the configured project can be read** by the configured account;
+- **the guidance that holds for that deployment**: on Cloud, Atlassian runs the
+  instance and the current search endpoint is `/rest/api/3/search/jql`; on Data
+  Center the organisation runs the instance and both `/rest/api/2` and
+  `/rest/api/3` are served; on Jira Server, whose support Atlassian ended in
+  February 2024, the instance receives no fixes from Atlassian.
+
+The report is `healthy` when the instance reports no failing health check and
+the project can be read, and `needs-attention` otherwise.
 
 ## Configuration
 

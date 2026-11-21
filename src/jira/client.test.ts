@@ -685,6 +685,58 @@ test("a body that is not JSON is reported as a Jira error", async () => {
   );
 });
 
+test("the server info is read from the instance", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({
+      baseUrl: "https://example.atlassian.net",
+      version: "1001.0.0",
+      versionNumbers: [1001, 0, 0],
+      deploymentType: "Cloud",
+      buildNumber: 1001,
+      serverTitle: "Jira",
+      healthChecks: [{ name: "Database", passed: true }],
+    }),
+  ]);
+
+  const info = await client(fetchImpl).getServerInfo();
+  assert.equal(info.deploymentType, "Cloud");
+  assert.equal(info.version, "1001.0.0");
+  assert.deepEqual([...(info.versionNumbers ?? [])], [1001, 0, 0]);
+  assert.equal(info.healthChecks.length, 1);
+  assert.equal(info.healthChecks[0].passed, true);
+  assert.equal(requests[0].url.pathname, "/rest/api/3/serverInfo");
+});
+
+test("a project that cannot be read is reported with its status", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+  ]);
+
+  await assert.rejects(
+    () => client(fetchImpl).getProject("EXAMPLE"),
+    (error: unknown) =>
+      error instanceof JiraError && error.status === 404,
+  );
+  assert.equal(requests[0].url.pathname, "/rest/api/3/project/EXAMPLE");
+});
+
+test("the project is read with its type and issue types", async () => {
+  const { fetchImpl } = fakeFetch([
+    jsonResponse({
+      key: "EXAMPLE",
+      name: "Example project",
+      projectTypeKey: "software",
+      issueTypes: [{ name: "Task" }, { name: "Bug" }],
+    }),
+  ]);
+
+  const project = await client(fetchImpl).getProject("EXAMPLE");
+  assert.equal(project.key, "EXAMPLE");
+  assert.equal(project.name, "Example project");
+  assert.equal(project.projectTypeKey, "software");
+  assert.deepEqual([...project.issueTypes], ["Task", "Bug"]);
+});
+
 test("listing versions reads the project versions", async () => {
   const { fetchImpl, requests } = fakeFetch([
     jsonResponse([

@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   normalizeIssue,
   normalizeIssues,
+  normalizeProject,
+  normalizeServerInfo,
   normalizeVersion,
   normalizeVersions,
 } from "./normalize.js";
@@ -150,6 +152,54 @@ test("a version without a name is dropped", () => {
   assert.equal(version.released, true);
   assert.equal(version.releaseDate, "2026-02-01");
   assert.equal(version.archived, false);
+});
+
+test("the server info is normalized with the health checks", () => {
+  const info = normalizeServerInfo({
+    baseUrl: "https://example.atlassian.net",
+    version: "1001.0.0",
+    versionNumbers: [1001, 0, 0],
+    deploymentType: "Cloud",
+    buildNumber: 1001,
+    serverTitle: "Jira",
+    healthChecks: [
+      { name: "Database", description: "Connected", passed: true },
+      { name: "Disk", passed: false },
+    ],
+  });
+  assert.equal(info.deploymentType, "Cloud");
+  assert.equal(info.buildNumber, 1001);
+  assert.equal(info.healthChecks.length, 2);
+  assert.equal(info.healthChecks[1].passed, false);
+  assert.equal(info.healthChecks[0].description, "Connected");
+});
+
+test("a server info without fields keeps what it was given", () => {
+  const info = normalizeServerInfo({});
+  assert.equal(info.deploymentType, undefined);
+  assert.deepEqual([...info.healthChecks], []);
+  assert.equal(normalizeServerInfo("nonsense").healthChecks.length, 0);
+});
+
+test("a health check without a name is left out", () => {
+  const info = normalizeServerInfo({ healthChecks: [{ passed: true }, null] });
+  assert.equal(info.healthChecks.length, 0);
+});
+
+test("the project is normalized with its issue types", () => {
+  const project = normalizeProject({
+    key: "EXAMPLE",
+    name: "Example project",
+    projectTypeKey: "software",
+    issueTypes: [{ name: "Task" }, { name: "Bug" }, {}],
+  });
+  assert.equal(project?.key, "EXAMPLE");
+  assert.deepEqual([...(project?.issueTypes ?? [])], ["Task", "Bug"]);
+});
+
+test("a project without a key is not a project", () => {
+  assert.equal(normalizeProject({ name: "No key" }), undefined);
+  assert.equal(normalizeProject("nonsense"), undefined);
 });
 
 test("lists of issues and versions ignore what is not a list", () => {
