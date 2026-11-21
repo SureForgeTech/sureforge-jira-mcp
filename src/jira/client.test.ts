@@ -710,6 +710,7 @@ test("the server info is read from the instance", async () => {
 test("a project that cannot be read is reported with its status", async () => {
   const { fetchImpl, requests } = fakeFetch([
     jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
   ]);
 
   await assert.rejects(
@@ -718,6 +719,23 @@ test("a project that cannot be read is reported with its status", async () => {
       error instanceof JiraError && error.status === 404,
   );
   assert.equal(requests[0].url.pathname, "/rest/api/3/project/EXAMPLE");
+});
+
+test("a site that does not know the current API version is read on the earlier one", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ errorMessages: ["Not found"] }, 404),
+    jsonResponse({
+      baseUrl: "https://example.atlassian.net",
+      version: "9.12.0",
+      deploymentType: "Data Center",
+      healthChecks: [],
+    }),
+  ]);
+
+  const info = await client(fetchImpl).getServerInfo();
+  assert.equal(info.deploymentType, "Data Center");
+  assert.equal(requests[0].url.pathname, "/rest/api/3/serverInfo");
+  assert.equal(requests[1].url.pathname, "/rest/api/2/serverInfo");
 });
 
 test("the project is read with its type and issue types", async () => {

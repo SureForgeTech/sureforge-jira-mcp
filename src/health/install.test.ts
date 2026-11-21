@@ -15,18 +15,21 @@ const CLOUD: ServerInfo = {
   buildNumber: 1001,
   serverTitle: "Jira",
   healthChecks: [],
+  healthChecksReported: false,
 };
 
 const DATA_CENTER: ServerInfo = {
   version: "9.12.0",
   deploymentType: "Data Center",
   healthChecks: [],
+  healthChecksReported: false,
 };
 
 const SERVER: ServerInfo = {
   version: "9.4.0",
   deploymentType: "Server",
   healthChecks: [],
+  healthChecksReported: false,
 };
 
 test("the deployment type is read from what the instance reports", () => {
@@ -37,12 +40,20 @@ test("the deployment type is read from what the instance reports", () => {
 
 test("a deployment type this server does not know is unknown", () => {
   assert.equal(
-    deploymentTypeOf({ deploymentType: "Mainframe", healthChecks: [] }),
+    deploymentTypeOf({
+      deploymentType: "Mainframe",
+      healthChecks: [],
+      healthChecksReported: false,
+    }),
     "unknown",
   );
-  assert.equal(deploymentTypeOf({ healthChecks: [] }), "unknown");
+  assert.equal(deploymentTypeOf({ healthChecks: [], healthChecksReported: false }), "unknown");
   assert.equal(
-    deploymentTypeOf({ deploymentType: "  ", healthChecks: [] }),
+    deploymentTypeOf({
+      deploymentType: "  ",
+      healthChecks: [],
+      healthChecksReported: false,
+    }),
     "unknown",
   );
 });
@@ -66,6 +77,7 @@ test("an unknown deployment gets no deployment guidance", () => {
 test("a healthy installation with a readable project is healthy", () => {
   const report = checkInstallation({
     serverInfo: CLOUD,
+    projectKey: "EXAMPLE",
     project: {
       key: "EXAMPLE",
       name: "Example project",
@@ -92,7 +104,9 @@ test("a health check of the instance that did not pass needs attention", () => {
         { name: "Database", passed: true },
         { name: "Disk space", description: "Low", passed: false },
       ],
+      healthChecksReported: true,
     },
+    projectKey: "EXAMPLE",
     project: { key: "EXAMPLE", issueTypes: [] },
   });
   assert.equal(report.status, "needs-attention");
@@ -104,17 +118,19 @@ test("a health check of the instance that did not pass needs attention", () => {
 test("a project that cannot be read needs attention", () => {
   const report = checkInstallation({
     serverInfo: CLOUD,
+    projectKey: "EXAMPLE",
     projectError: "Jira answered 404 Not Found for /rest/api/3/project/EXAMPLE.",
   });
   assert.equal(report.status, "needs-attention");
   assert.equal(report.project.found, false);
-  assert.equal(report.project.key, "");
+  assert.equal(report.project.key, "EXAMPLE");
   assert.match(report.project.error ?? "", /404/);
 });
 
 test("the report says which deployment type the instance reported", () => {
   const report = checkInstallation({
     serverInfo: DATA_CENTER,
+    projectKey: "EXAMPLE",
     project: { key: "EXAMPLE", issueTypes: [] },
   });
   assert.equal(report.deployment.type, "data-center");
@@ -131,4 +147,79 @@ test("every deployment has guidance", () => {
   ] as DeploymentType[]) {
     assert.ok(guidanceFor(deployment).length > 0, deployment);
   }
+});
+
+test("an instance that reports no health checks says so", () => {
+  const report = checkInstallation({
+    serverInfo: CLOUD,
+    projectKey: "EXAMPLE",
+    project: { key: "EXAMPLE", issueTypes: [] },
+  });
+  assert.equal(report.healthChecksReported, false);
+  assert.deepEqual([...report.healthChecks], []);
+  assert.deepEqual([...report.failingHealthChecks], []);
+  assert.equal(
+    report.status,
+    "healthy",
+    "the project can be read and no check failed",
+  );
+});
+
+test("a health check whose result the instance did not state is not a failure", () => {
+  const report = checkInstallation({
+    serverInfo: {
+      ...CLOUD,
+      healthChecks: [{ name: "Database" }],
+      healthChecksReported: true,
+    },
+    projectKey: "EXAMPLE",
+    project: { key: "EXAMPLE", issueTypes: [] },
+  });
+  assert.equal(report.status, "healthy");
+  assert.deepEqual([...report.failingHealthChecks], []);
+});
+
+test("a Jira Server deployment is reported as out of support", () => {
+  const report = checkInstallation({
+    serverInfo: SERVER,
+    projectKey: "EXAMPLE",
+    project: { key: "EXAMPLE", issueTypes: [] },
+  });
+  assert.equal(report.deployment.support, "end-of-support");
+  assert.equal(report.deployment.type, "server");
+});
+
+test("a Cloud or Data Center deployment is reported as supported", () => {
+  const cloud = checkInstallation({
+    serverInfo: CLOUD,
+    projectKey: "EXAMPLE",
+    project: { key: "EXAMPLE", issueTypes: [] },
+  });
+  assert.equal(cloud.deployment.support, "supported");
+  const dataCenter = checkInstallation({
+    serverInfo: DATA_CENTER,
+    projectKey: "EXAMPLE",
+    project: { key: "EXAMPLE", issueTypes: [] },
+  });
+  assert.equal(dataCenter.deployment.support, "supported");
+});
+
+test("the report names the project that was asked for, even when it was not found", () => {
+  const report = checkInstallation({
+    serverInfo: CLOUD,
+    projectKey: "OTHER",
+    projectError: "Jira answered 404 Not Found for /rest/api/3/project/OTHER.",
+  });
+  assert.equal(report.project.key, "OTHER");
+  assert.equal(report.project.found, false);
+});
+
+test("the guidance for Data Center names the API version it documents", () => {
+  const guidance = guidanceFor("data-center").join(" ");
+  assert.match(guidance, /REST API version 2/);
+  assert.equal(
+    guidance.includes("serves both /rest/api/2 and /rest/api/3"),
+    false,
+    "the claim was wrong for the current Data Center line",
+  );
 });

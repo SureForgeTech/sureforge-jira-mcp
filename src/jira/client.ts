@@ -250,6 +250,28 @@ export class JiraClient {
   }
 
   /**
+   * Perform a request against the current API version, and against the
+   * earlier one when the site does not know the current one.
+   *
+   * Jira Cloud serves REST API version 3. Jira Data Center and Jira Server
+   * document version 2, and a Data Center instance answers 404 for a version
+   * 3 path, so the earlier version is used there.
+   */
+  private async requestVersioned(
+    pathCurrent: string,
+    pathEarlier: string,
+  ): Promise<unknown> {
+    try {
+      return await this.request(pathCurrent);
+    } catch (error) {
+      if (!isUnknownEndpoint(error)) {
+        throw error;
+      }
+      return this.request(pathEarlier);
+    }
+  }
+
+  /**
    * List the issues of a project.
    *
    * The listing reads every page the site offers, up to the issue cap. When
@@ -502,7 +524,10 @@ export class JiraClient {
    * checks the instance runs against itself.
    */
   async getServerInfo(): Promise<ServerInfo> {
-    const payload = await this.request("/rest/api/3/serverInfo");
+    const payload = await this.requestVersioned(
+      "/rest/api/3/serverInfo",
+      "/rest/api/2/serverInfo",
+    );
     return normalizeServerInfo(payload);
   }
 
@@ -513,8 +538,10 @@ export class JiraClient {
    * with an error status; the caller turns that into a finding.
    */
   async getProject(projectKey: string): Promise<ProjectSummary> {
-    const payload = await this.request(
-      `/rest/api/3/project/${encodeURIComponent(projectKey)}`,
+    const key = encodeURIComponent(projectKey);
+    const payload = await this.requestVersioned(
+      `/rest/api/3/project/${key}`,
+      `/rest/api/2/project/${key}`,
     );
     const project = normalizeProject(payload);
     if (project === undefined) {

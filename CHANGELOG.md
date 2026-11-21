@@ -10,7 +10,7 @@ project uses semantic versioning.
 
 - Project scaffold: the TypeScript build, the declared `npm run check`
   validation command and the server entry point.
-- The MCP server speaks over its standard input and output and publishes five
+- The MCP server speaks over its standard input and output and publishes six
   read-only tools: `jira_find_orphaned_issues`,
   `jira_find_missing_release_versions`, `jira_find_stale_blockers`,
   `jira_find_broken_hierarchies` and `jira_health_summary`.
@@ -26,8 +26,8 @@ project uses semantic versioning.
 
 - `jira_check_installation` reports the health of the installation: the
   deployment type and version of the instance, the health checks the instance
-  reports about itself, whether the project can be read, and the guidance that
-  holds for that deployment.
+  reports about itself, whether the project can be read, the support status of
+  the deployment, and the guidance that holds for that deployment.
 
 ### Changed
 

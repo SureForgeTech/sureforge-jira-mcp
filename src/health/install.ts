@@ -17,6 +17,9 @@ export type InstallationStatus = "healthy" | "needs-attention";
 /** The deployment types the report knows. */
 export type DeploymentType = "cloud" | "data-center" | "server" | "unknown";
 
+/** Whether Atlassian still supports the deployment. */
+export type SupportStatus = "supported" | "end-of-support" | "unknown";
+
 /** The report of the installation health. */
 export interface InstallationReport {
   /** Whether the installation is healthy. */
@@ -33,14 +36,23 @@ export interface InstallationReport {
     readonly buildNumber?: number;
     /** The title of the instance. */
     readonly title?: string;
+    /** Whether Atlassian still supports the deployment. */
+    readonly support: SupportStatus;
   };
   /** The health checks the instance reports about itself. */
   readonly healthChecks: readonly InstanceHealthCheck[];
+  /**
+   * Whether the instance reports health checks at all.
+   *
+   * Jira Cloud does not, so an instance without checks is not an instance
+   * without health: there was no evidence to report.
+   */
+  readonly healthChecksReported: boolean;
   /** The health checks that did not pass. */
   readonly failingHealthChecks: readonly InstanceHealthCheck[];
   /** The project the report is about. */
   readonly project: {
-    /** The key of the project. */
+    /** The key of the project that was asked for. */
     readonly key: string;
     /** Whether the project was found and may be read. */
     readonly found: boolean;
@@ -61,6 +73,8 @@ export interface InstallationReport {
 export interface InstallationInput {
   /** What the instance reported about itself. */
   readonly serverInfo: ServerInfo;
+  /** The key of the project that was asked for. */
+  readonly projectKey: string;
   /** The project, when it was found. */
   readonly project?: ProjectSummary;
   /** The reason the project could not be read, when it could not. */
@@ -97,6 +111,18 @@ export function deploymentTypeOf(serverInfo: ServerInfo): DeploymentType {
  * The facts are the ones Atlassian documents: who runs the instance, who
  * upgrades it, and which parts of the REST API it serves.
  */
+export function supportOf(deployment: DeploymentType): SupportStatus {
+  switch (deployment) {
+    case "cloud":
+    case "data-center":
+      return "supported";
+    case "server":
+      return "end-of-support";
+    case "unknown":
+      return "unknown";
+  }
+}
+
 export function guidanceFor(deployment: DeploymentType): string[] {
   switch (deployment) {
     case "cloud":
@@ -107,7 +133,7 @@ export function guidanceFor(deployment: DeploymentType): string[] {
     case "data-center":
       return [
         "This instance is run by your organisation: the version is the one to plan upgrades for.",
-        "Data Center serves both /rest/api/2 and /rest/api/3, and some resources exist only in version 2.",
+        "Jira Data Center documents REST API version 2; a Data Center instance answers 404 for a version 3 path, so this server reads the earlier version there.",
       ];
     case "server":
       return [
@@ -129,7 +155,8 @@ export function guidanceFor(deployment: DeploymentType): string[] {
  */
 export function checkInstallation(input: InstallationInput): InstallationReport {
   const deployment = deploymentTypeOf(input.serverInfo);
-  const failing = input.serverInfo.healthChecks.filter((check) => !check.passed);
+  const healthChecks = input.serverInfo.healthChecks ?? [];
+  const failing = healthChecks.filter((check) => check.passed === false);
   const projectFound = input.project !== undefined;
 
   return {
@@ -148,11 +175,13 @@ export function checkInstallation(input: InstallationInput): InstallationReport 
       ...(input.serverInfo.serverTitle === undefined
         ? {}
         : { title: input.serverInfo.serverTitle }),
+      support: supportOf(deployment),
     },
-    healthChecks: input.serverInfo.healthChecks,
+    healthChecks,
+    healthChecksReported: input.serverInfo.healthChecksReported,
     failingHealthChecks: failing,
     project: {
-      key: input.project?.key ?? "",
+      key: input.project?.key ?? input.projectKey,
       found: projectFound,
       ...(input.project?.name === undefined ? {} : { name: input.project.name }),
       ...(input.project?.projectTypeKey === undefined

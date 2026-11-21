@@ -287,7 +287,7 @@ export function normalizeVersion(raw: unknown): ProjectVersion | undefined {
  */
 export function normalizeServerInfo(raw: unknown): ServerInfo {
   if (raw === null || typeof raw !== "object") {
-    return { healthChecks: [] };
+    return { healthChecks: [], healthChecksReported: false };
   }
   const info = raw as {
     baseUrl?: unknown;
@@ -320,6 +320,7 @@ export function normalizeServerInfo(raw: unknown): ServerInfo {
       ? {}
       : { serverTitle: text(info.serverTitle) }),
     healthChecks: normalizeHealthChecks(info.healthChecks),
+    healthChecksReported: Array.isArray(info.healthChecks),
   };
 }
 
@@ -343,7 +344,8 @@ export function normalizeHealthChecks(raw: unknown): InstanceHealthCheck[] {
       ...(text(check.description) === undefined
         ? {}
         : { description: text(check.description) }),
-      passed: check.passed === true,
+      // A result the instance did not state is not a failed check.
+      ...(typeof check.passed === "boolean" ? { passed: check.passed } : {}),
     });
   }
   return checks;

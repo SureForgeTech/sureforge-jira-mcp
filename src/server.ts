@@ -333,7 +333,13 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
       title: "Check the health of the installation",
       description:
         "Report the health of the Jira installation: the deployment type and version of the instance, the health checks the instance reports about itself, whether the project can be read, and the guidance that holds for that deployment.",
-      inputSchema: toolInput,
+      // The report has no findings to cap, so it takes no limit.
+      inputSchema: z.object({
+        projectKey: z
+          .string()
+          .optional()
+          .describe("The project to report on. Defaults to the configured project."),
+      }),
     },
     async (args) => {
       const projectKey = projectOf(args);
@@ -347,10 +353,18 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
       try {
         project = await options.reader.getProject(projectKey);
       } catch (error) {
-        projectError = error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
+        // The message travels in a tool result, so it goes through the same
+        // redaction as every other message.
+        projectError = redact(message, secrets);
       }
 
-      return checkInstallation({ serverInfo, project, projectError });
+      return checkInstallation({
+        serverInfo,
+        projectKey,
+        project,
+        projectError,
+      });
     },
   );
 

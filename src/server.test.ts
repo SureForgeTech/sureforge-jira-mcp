@@ -32,6 +32,7 @@ const EXAMPLE_SERVER_INFO: ServerInfo = {
   buildNumber: 1001,
   serverTitle: "Jira",
   healthChecks: [],
+  healthChecksReported: false,
 };
 
 /** The project the example fixtures describe. */
@@ -422,6 +423,29 @@ test("the installation tool still reports when the project cannot be read", asyn
     assert.equal(project.found, false);
     assert.match(project.error ?? "", /404/);
     assert.equal(deployment.type, "cloud");
+  } finally {
+    await close();
+  }
+});
+
+test("the installation tool never carries the token in its error", async () => {
+  const { client, close } = await connect(
+    reader({
+      getProject: async () => {
+        throw new Error("The request failed for token example-token-value");
+      },
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_check_installation",
+      arguments: {},
+    });
+    const body = payload(result);
+    const project = body.project as { error?: string };
+    assert.equal((body as { isError?: boolean }).isError, undefined);
+    assert.equal(project.error?.includes("example-token-value"), false);
+    assert.match(project.error ?? "", /\*\*\*/);
   } finally {
     await close();
   }

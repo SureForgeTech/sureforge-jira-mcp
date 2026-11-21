@@ -110,8 +110,13 @@ export interface InstanceHealthCheck {
   readonly name: string;
   /** What the check looked at, when the instance says so. */
   readonly description?: string;
-  /** Whether the check passed. */
-  readonly passed: boolean;
+  /**
+   * Whether the check passed.
+   *
+   * It is undefined when the instance did not say, which is not the same as a
+   * check that failed.
+   */
+  readonly passed?: boolean;
 }
 
 /** What the Jira instance reports about itself. */
@@ -130,6 +135,14 @@ export interface ServerInfo {
   readonly serverTitle?: string;
   /** The health checks the instance reports about itself. */
   readonly healthChecks: readonly InstanceHealthCheck[];
+  /**
+   * Whether the instance reports health checks at all.
+   *
+   * Jira Cloud does not: the field is deprecated there and no longer
+   * returned, so an empty list of checks is not evidence that the instance
+   * is healthy.
+   */
+  readonly healthChecksReported: boolean;
 }
 
 /** The part of a project the health report needs. */

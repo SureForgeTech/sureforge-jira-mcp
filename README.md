@@ -40,17 +40,23 @@ instead.
 
 - **the deployment type and version** the instance reports for itself, with the
   build number and the title of the instance;
-- **the health checks the instance runs against itself**, and the ones that did
-  not pass;
+- **the health checks the instance reports about itself**, and the ones that did
+  not pass. Jira Cloud does not report them any more - the field is deprecated
+  there - so the report says `healthChecksReported: false` rather than
+  pretending the instance was checked;
 - **whether the configured project can be read** by the configured account;
-- **the guidance that holds for that deployment**: on Cloud, Atlassian runs the
-  instance and the current search endpoint is `/rest/api/3/search/jql`; on Data
-  Center the organisation runs the instance and both `/rest/api/2` and
-  `/rest/api/3` are served; on Jira Server, whose support Atlassian ended in
-  February 2024, the instance receives no fixes from Atlassian.
+- **the support status of the deployment** and **the guidance that holds for
+  it**: on Cloud, Atlassian runs the instance and the current search endpoint
+  is `/rest/api/3/search/jql`; on Data Center the organisation runs the
+  instance and Atlassian documents REST API version 2 there, so a Data Center
+  instance that answers 404 for a version 3 path is read on version 2; on Jira
+  Server, whose support Atlassian ended in February 2024, the instance
+  receives no fixes from Atlassian.
 
 The report is `healthy` when the instance reports no failing health check and
-the project can be read, and `needs-attention` otherwise.
+the project can be read, and `needs-attention` otherwise. A deployment Atlassian
+no longer supports is reported as `end-of-support`; that is a fact about the
+deployment, not a fault in the instance, so it does not change the status.
 
 ## Configuration
 
