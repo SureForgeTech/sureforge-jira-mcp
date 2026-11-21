@@ -979,3 +979,22 @@ test("a field whose value is not a key at all leaves the relation unknown", asyn
     );
   }
 });
+
+test("a project that cannot be read is read on the earlier API version too", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+    jsonResponse({ errorMessages: ["Project does not exist"] }, 404),
+  ]);
+
+  await assert.rejects(() => client(fetchImpl).getProject("EXAMPLE"), JiraError);
+  assert.equal(requests[1].url.pathname, "/rest/api/2/project/EXAMPLE");
+});
+
+test("the project key is encoded in the path", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ key: "A/B", name: "Odd key", issueTypes: [] }),
+  ]);
+
+  await client(fetchImpl).getProject("A/B?x=1");
+  assert.equal(requests[0].url.pathname, "/rest/api/3/project/A%2FB%3Fx%3D1");
+});

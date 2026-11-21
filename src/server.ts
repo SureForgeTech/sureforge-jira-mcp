@@ -1,7 +1,7 @@
 /**
  * The MCP server.
  *
- * The server publishes five read-only tools over the health rules: one per
+ * The server publishes six read-only tools over the health rules: one per
  * problem the product names, plus the aggregate summary. Every tool reads
  * the project through the client and returns findings as JSON.
  */

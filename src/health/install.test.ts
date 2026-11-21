@@ -223,3 +223,29 @@ test("the guidance for Data Center names the API version it documents", () => {
     "the claim was wrong for the current Data Center line",
   );
 });
+
+test("an instance that says nothing about itself is not healthy", () => {
+  const report = checkInstallation({
+    serverInfo: { healthChecks: [], healthChecksReported: false },
+    projectKey: "EXAMPLE",
+    project: { key: "EXAMPLE", issueTypes: [] },
+  });
+  assert.equal(report.status, "needs-attention");
+  assert.equal(report.deployment.type, "unknown");
+  assert.equal(report.deployment.support, "unknown");
+});
+
+test("an instance with an empty list of checks is not a checked instance", () => {
+  const report = checkInstallation({
+    serverInfo: {
+      deploymentType: "Cloud",
+      version: "1001.0.0",
+      healthChecks: [],
+      healthChecksReported: false,
+    },
+    projectKey: "EXAMPLE",
+    project: { key: "EXAMPLE", issueTypes: [] },
+  });
+  assert.equal(report.healthChecksReported, false);
+  assert.equal(report.status, "healthy");
+});

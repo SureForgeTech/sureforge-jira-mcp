@@ -15,12 +15,13 @@ The server only reads. It never changes an issue, and it never writes to Jira.
 | `jira_health_summary` | The aggregate view: the number of findings per category and severity, the findings to look at first, and a status of `healthy` or `needs-attention`. |
 | `jira_check_installation` | The health of the installation: the deployment type and version of the instance, the health checks the instance reports about itself, whether the project can be read, and the guidance that holds for that deployment. |
 
-Every tool takes an optional `projectKey`, an optional `limit`, and the
-thresholds that apply to it (`staleDays`, `maxDepth`). The findings are
-ordered worst first.
+Every tool that reports findings takes an optional `projectKey`, an optional
+`limit`, and the thresholds that apply to it (`staleDays`, `maxDepth`). The
+findings are ordered worst first. `jira_check_installation` reports on the
+installation rather than on findings, so it takes only `projectKey`.
 
-Every tool result carries `issuesExamined`, the number of issues it looked
-at. A listing reads at most 2000 issues per project. When the listing may be
+Every tool that reads issues carries `issuesExamined`, the number of issues
+it looked at. A listing reads at most 2000 issues per project. When the listing may be
 missing issues the result carries `truncated: true`, and `issuesDropped`
 names how many issues the listing left out - the ones the site returned
 without a key, and the ones the issue cap cut off. A parent or epic that

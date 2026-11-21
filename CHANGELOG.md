@@ -13,7 +13,8 @@ project uses semantic versioning.
 - The MCP server speaks over its standard input and output and publishes six
   read-only tools: `jira_find_orphaned_issues`,
   `jira_find_missing_release_versions`, `jira_find_stale_blockers`,
-  `jira_find_broken_hierarchies` and `jira_health_summary`.
+  `jira_find_broken_hierarchies`, `jira_health_summary` and
+  `jira_check_installation`.
 - The Jira REST client reads a project and its release versions, falls back to
   the earlier search endpoint when a site does not know the current one, and
   never carries a credential into a message.

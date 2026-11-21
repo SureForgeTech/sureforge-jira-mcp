@@ -143,6 +143,7 @@ export function guidanceFor(deployment: DeploymentType): string[] {
     case "unknown":
       return [
         "The instance did not report a deployment type this server knows, so no deployment guidance can be given.",
+        "An instance that does not report its version or its deployment type cannot be checked for support status.",
       ];
   }
 }
@@ -158,9 +159,17 @@ export function checkInstallation(input: InstallationInput): InstallationReport 
   const healthChecks = input.serverInfo.healthChecks ?? [];
   const failing = healthChecks.filter((check) => check.passed === false);
   const projectFound = input.project !== undefined;
+  // An instance that said nothing about itself was not checked, so the
+  // report cannot call the installation healthy on that basis.
+  const instanceReported =
+    input.serverInfo.deploymentType !== undefined ||
+    input.serverInfo.version !== undefined;
 
   return {
-    status: failing.length === 0 && projectFound ? "healthy" : "needs-attention",
+    status:
+      failing.length === 0 && projectFound && instanceReported
+        ? "healthy"
+        : "needs-attention",
     deployment: {
       type: deployment,
       ...(input.serverInfo.deploymentType === undefined

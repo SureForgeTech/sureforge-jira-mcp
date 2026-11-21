@@ -136,11 +136,11 @@ export interface ServerInfo {
   /** The health checks the instance reports about itself. */
   readonly healthChecks: readonly InstanceHealthCheck[];
   /**
-   * Whether the instance reports health checks at all.
+   * Whether the instance reported health check results.
    *
-   * Jira Cloud does not: the field is deprecated there and no longer
-   * returned, so an empty list of checks is not evidence that the instance
-   * is healthy.
+   * Jira Cloud does not report them: the field is deprecated there and the
+   * documented answer carries an empty list, so an instance without results
+   * is not an instance that was checked.
    */
   readonly healthChecksReported: boolean;
 }

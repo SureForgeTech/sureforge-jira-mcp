@@ -791,3 +791,31 @@ test("an orphan says the listing does not cover the project and the epic is unkn
     await close();
   }
 });
+
+test("the installation tool uses the project key it is given", async () => {
+  const asked: string[] = [];
+  const { client, close } = await connect(
+    reader({
+      getProject: async (projectKey: string) => {
+        asked.push(projectKey);
+        return {
+          key: projectKey,
+          name: "Another project",
+          projectTypeKey: "software",
+          issueTypes: [],
+        };
+      },
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_check_installation",
+      arguments: { projectKey: "other" },
+    });
+    assert.deepEqual(asked, ["OTHER"]);
+    const project = payload(result).project as { key: string };
+    assert.equal(project.key, "OTHER");
+  } finally {
+    await close();
+  }
+});
