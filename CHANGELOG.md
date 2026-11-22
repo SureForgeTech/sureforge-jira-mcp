@@ -32,9 +32,9 @@ project uses semantic versioning.
   says that the epic relation is unknown.
 
 - `jira_find_release_problems` reports the releases that do not say what they
-  should say: a version that was released while issues in it were still open,
-  a version that was released without a release date, and a version that
-  holds no issues at all.
+  should say: a version that was released and still holds open issues, a
+  version that was released without a release date, and a version that holds
+  no issues at all.
 - `jira_find_workflow_problems` reports the issues where the workflow and the
   issue disagree: an issue that is closed without a resolution, an issue that
   is resolved while its status is still open, and a closed issue with a child
@@ -48,10 +48,9 @@ project uses semantic versioning.
 - The issue carries its assignee, the presence of a description and the status
   category, so a rule can tell work in progress from work that has not started
   without relying on the names of the statuses.
-- `jira_health_summary` counts the hygiene findings as well, so an agent that
-  reads only the summary is not told that a project with hygiene problems is
-  free of them. It counts the workflow findings and the release findings as
-  well.
+- `jira_health_summary` counts the hygiene findings, the workflow findings
+  and the release findings as well, so an agent that reads only the summary
+  is not told that a project with problems is free of them.
 - `jira_health_summary` counts the workflow findings as well.
 - The description and the assignee are only asked for by the tools that read
   them, so the other tools do not download the text of every description of

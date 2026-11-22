@@ -195,7 +195,10 @@ test("the built server answers the health tools over stdio", async (t) => {
     await client.callTool({ name: "jira_find_release_problems", arguments: {} }),
   );
   assert.equal(releases.projectKey, "EXAMPLE");
-  assert.ok(Array.isArray(releases.findings));
+  // The mock holds the version 1.1.0, which has no issues in it.
+  assert.equal(releases.count, 1);
+  assert.equal(releases.findings[0].issueKey, "1.1.0");
+  assert.match(releases.findings[0].detail, /holds no issues/);
 
   const workflow = payload(
     await client.callTool({ name: "jira_find_workflow_problems", arguments: {} }),

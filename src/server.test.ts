@@ -288,6 +288,52 @@ test("the workflow tool reports a closed issue with open work on a partial listi
   }
 });
 
+test("the release tool reports the releases that do not say what they should say", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          makeIssue({
+            key: "EX-1",
+            fixVersions: ["1.0.0"],
+            statusCategory: "new",
+          }),
+        ],
+        truncated: false,
+        dropped: 0,
+        examined: 1,
+        epicLinkKnown: true,
+      }),
+      listVersions: async () => [
+        {
+          name: "1.0.0",
+          released: true,
+          releaseDate: "2026-02-01",
+          archived: false,
+        },
+      ],
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_release_problems",
+      arguments: {},
+    });
+    const body = payload(result);
+    const findings = body.findings as Array<{
+      issueKey: string;
+      category: string;
+      severity: string;
+    }>;
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].issueKey, "1.0.0");
+    assert.equal(findings[0].category, "release-problem");
+    assert.equal(findings[0].severity, "high");
+  } finally {
+    await close();
+  }
+});
+
 test("the summary counts the release findings", async () => {
   const { client, close } = await connect(
     reader({

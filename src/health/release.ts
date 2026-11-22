@@ -11,6 +11,21 @@
  */
 import type { Finding, Issue, ProjectVersion } from "../jira/types.js";
 
+/** The settings the release rules take. */
+export interface ReleaseOptions {
+  /**
+   * Whether the listing covers the whole project.
+   *
+   * A version that holds no issue in the listing may hold issues outside it,
+   * so the rule that says a version holds nothing is hedged when the listing
+   * is incomplete.
+   */
+  readonly listingComplete?: boolean;
+}
+
+/** The number of issue keys one finding names. */
+const MAX_NAMED_KEYS = 10;
+
 /** Whether an issue is known to be unfinished. */
 function isUnfinished(issue: Issue): boolean {
   if (issue.resolution !== undefined) {
@@ -27,8 +42,8 @@ function isUnfinished(issue: Issue): boolean {
  *
  * Three problems are reported:
  *
- * - a version that was released while issues in it were still open, so the
- *   release notes and the burndown do not describe what shipped;
+ * - a version that was released and still holds open issues, so the release
+ *   notes and the burndown do not describe what shipped;
  * - a version that was released without a release date, so nothing says when
  *   it shipped;
  * - a version that holds no issues at all, so it will ship nothing.
@@ -36,7 +51,9 @@ function isUnfinished(issue: Issue): boolean {
 export function findReleaseProblems(
   issues: readonly Issue[],
   versions: readonly ProjectVersion[],
+  options: ReleaseOptions = {},
 ): Finding[] {
+  const listingComplete = options.listingComplete ?? true;
   const findings: Finding[] = [];
 
   for (const version of versions) {
@@ -46,13 +63,16 @@ export function findReleaseProblems(
     const open = inVersion.filter(isUnfinished);
 
     if (version.released && open.length > 0) {
+      const keys = open.map((issue) => issue.key);
+      const named = keys.slice(0, MAX_NAMED_KEYS);
+      const rest = keys.length - named.length;
       findings.push({
         category: "release-problem",
         issueKey: version.name,
-        summary: `The release ${version.name} was released while ${open.length} issue(s) in it were still open.`,
-        detail: `The release ${version.name} was released while ${open.length} issue(s) in it were still open: ${open.map((issue) => issue.key).join(", ")}.`,
+        summary: `The release ${version.name} still holds ${keys.length} open issue(s).`,
+        detail: `The release ${version.name} still holds ${keys.length} open issue(s): ${named.join(", ")}${rest > 0 ? ` and ${rest} more` : ""}.`,
         severity: "high",
-        relatedKeys: open.map((issue) => issue.key),
+        relatedKeys: keys,
       });
     }
 
@@ -71,8 +91,12 @@ export function findReleaseProblems(
       findings.push({
         category: "release-problem",
         issueKey: version.name,
-        summary: `The release ${version.name} holds no issues.`,
-        detail: `The release ${version.name} holds no issues, so it will ship nothing.`,
+        summary: listingComplete
+          ? `The release ${version.name} holds no issues.`
+          : `No issue of the listing names the release ${version.name}.`,
+        detail: listingComplete
+          ? `The release ${version.name} holds no issues, so it will ship nothing.`
+          : `No issue of the listing names the release ${version.name}, and the listing does not cover the whole project.`,
         severity: "low",
         relatedKeys: [],
       });

@@ -411,9 +411,11 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, listing } = await loadIssues(projectKey);
+      const { issues, listingComplete, listing } = await loadIssues(projectKey);
       const versions = await loadVersions(projectKey);
-      const findings = findReleaseProblems(issues, versions);
+      const findings = findReleaseProblems(issues, versions, {
+        listingComplete,
+      });
       return {
         projectKey,
         count: findings.length,
@@ -532,7 +534,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           now: now(),
         }),
         ...findWorkflowProblems(issues),
-        ...findReleaseProblems(issues, versions),
+        ...findReleaseProblems(issues, versions, { listingComplete }),
       ];
       const summary = summarizeHealth(findings, { limit: args.limit ?? 10 });
       return {

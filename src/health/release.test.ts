@@ -148,3 +148,45 @@ test("the issue key of a release finding is the version", () => {
 test("a project with no versions has nothing to report", () => {
   assert.deepEqual(findReleaseProblems([makeIssue({ key: "EX-1" })], []), []);
 });
+
+test("a version that holds nothing is hedged when the listing is incomplete", () => {
+  const findings = findReleaseProblems([], [VERSION], { listingComplete: false });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, "low");
+  assert.match(findings[0].detail, /does not cover the whole project/);
+});
+
+test("an issue that carries a resolution does not hold a release open", () => {
+  const findings = findReleaseProblems(
+    [
+      makeIssue({
+        key: "EX-1",
+        fixVersions: ["1.0.0"],
+        statusCategory: "indeterminate",
+        resolution: "Fixed",
+      }),
+    ],
+    [VERSION],
+  );
+  assert.deepEqual(
+    findings.filter((finding) => finding.severity === "high"),
+    [],
+    "a resolved issue is not open work",
+  );
+});
+
+test("a release with many open issues names the first ten and counts the rest", () => {
+  const issues = Array.from({ length: 12 }, (_, index) =>
+    makeIssue({
+      key: `EX-${index}`,
+      fixVersions: ["1.0.0"],
+      statusCategory: "new",
+    }),
+  );
+  const findings = findReleaseProblems(issues, [VERSION]);
+  const finding = findings.find((entry) => entry.severity === "high");
+  assert.ok(finding);
+  assert.match(finding.detail, /12 open issue/);
+  assert.match(finding.detail, /and 2 more/);
+  assert.equal(finding.relatedKeys.length, 12);
+});

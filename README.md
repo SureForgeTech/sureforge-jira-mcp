@@ -16,7 +16,7 @@ The server only reads. It never changes an issue, and it never writes to Jira.
 | `jira_check_installation` | The health of the installation: the deployment type and version of the instance, the health checks the instance reports about itself, whether the project can be read, and the guidance that holds for that deployment. |
 | `jira_find_issue_hygiene_problems` | The issues that are not kept well enough to be worked on: no summary, no description, work in progress without an assignee, no priority, a due date that has passed while the issue is still open, and work in progress that has not been updated for the staleness threshold. |
 | `jira_find_workflow_problems` | The issues where the workflow and the issue disagree: an issue that is closed without a resolution, an issue that is resolved while its status is still open, and a closed issue with a child that is not finished. |
-| `jira_find_release_problems` | The releases that do not say what they should say: a version that was released while issues in it were still open, a version that was released without a release date, and a version that holds no issues. |
+| `jira_find_release_problems` | The releases that do not say what they should say: a version that was released and still holds open issues, a version that was released without a release date, and a version that holds no issues. The key of such a finding is the version. |
 
 Every tool that reports findings takes an optional `projectKey`, an optional
 `limit`, and the thresholds that apply to it (`staleDays`, `maxDepth`,
@@ -101,15 +101,16 @@ is incomplete.
 `jira_find_release_problems` looks at the releases of the project rather
 than at the issues:
 
-- **a version that was released while issues in it were still open** - the
-  release notes and the burndown do not describe what shipped;
+- **a version that was released and still holds open issues** - the release
+  notes and the burndown do not describe what shipped;
 - **a version that was released without a release date** - nothing says when
   it shipped;
 - **a version that holds no issues at all** - it will ship nothing.
 
 An issue counts as open when it carries no resolution and its status is not in
 the category Jira groups the finished statuses in. A version that was
-archived is not reported for holding nothing.
+archived is not reported for holding nothing, and on an incomplete listing
+that finding says so instead of claiming the version is empty.
 
 ## Deployment and installation
 
