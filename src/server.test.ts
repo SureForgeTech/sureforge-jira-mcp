@@ -236,10 +236,12 @@ test("the summary counts every category", async () => {
       "missing-release-version": 2,
       "stale-blocker": 1,
       "broken-hierarchy": 1,
-      "issue-hygiene": 0,
-      "workflow-problem": 0,
+      // The summary counts the hygiene findings too: an agent that reads
+      // only the summary must not be told a project with hygiene problems
+      // is free of them.
+      "issue-hygiene": 6,
     });
-    assert.equal(body.total, 6);
+    assert.equal(body.total, 12);
   } finally {
     await close();
   }
@@ -396,6 +398,7 @@ test("the hygiene tool reports the issues that are not kept well enough", async 
             priority: "Medium",
             status: "In Progress",
             statusCategory: "indeterminate",
+            assignee: undefined,
           }),
         ],
         truncated: false,

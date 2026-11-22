@@ -221,7 +221,9 @@ export function normalizeIssue(
     id: text(issue.id) ?? key,
     summary: text(fields.summary) ?? "",
     status: nameOf(fields.status) ?? "Unknown",
-    statusCategory: statusCategoryOf(fields.status),
+    ...(statusCategoryOf(fields.status) === undefined
+      ? {}
+      : { statusCategory: statusCategoryOf(fields.status) }),
     issueType: nameOf(fields.issuetype) ?? "Unknown",
     ...(nameOf(fields.resolution) === undefined
       ? {}
@@ -257,16 +259,18 @@ export function normalizeIssue(
  * needs to know whether work is open cannot be told apart from a status it
  * does not know.
  */
-function statusCategoryOf(status: unknown): StatusCategory {
+function statusCategoryOf(status: unknown): StatusCategory | undefined {
   const key = text(
     status !== null && typeof status === "object"
       ? (status as { statusCategory?: { key?: unknown } | null }).statusCategory?.key
       : undefined,
   );
-  if (key === "new" || key === "done") {
+  if (key === "new" || key === "done" || key === "indeterminate") {
     return key;
   }
-  return "indeterminate";
+  // The site did not report a category, so it is unknown rather than
+  // presumed: a rule must not read it as work in progress.
+  return undefined;
 }
 
 /** The name of the account an issue is assigned to. */
@@ -298,14 +302,19 @@ export function hasContent(value: unknown): boolean {
     return value.trim().length > 0;
   }
   if (Array.isArray(value)) {
-    return value.length > 0;
+    return value.some((entry) => hasContent(entry));
   }
   if (typeof value === "object") {
     const content = (value as { content?: unknown }).content;
     if (Array.isArray(content)) {
-      return content.length > 0;
+      return content.some((entry) => hasContent(entry));
     }
-    return Object.keys(value).length > 0;
+    // A document without a content array carries no text either.
+    const text_ = (value as { text?: unknown }).text;
+    if (typeof text_ === "string") {
+      return text_.trim().length > 0;
+    }
+    return false;
   }
   return true;
 }

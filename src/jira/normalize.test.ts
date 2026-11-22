@@ -104,9 +104,40 @@ test("the description is read as present or absent", () => {
   });
   assert.equal(emptyDocument?.descriptionPresent, false);
 
+  const documentWithoutContent = normalizeIssue({
+    key: "EX-1",
+    fields: { description: { type: "doc", version: 1 } },
+  });
+  assert.equal(documentWithoutContent?.descriptionPresent, false);
+
+  const blankDocument = normalizeIssue({
+    key: "EX-1",
+    fields: {
+      description: {
+        type: "doc",
+        version: 1,
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "   " }] },
+        ],
+      },
+    },
+  });
+  assert.equal(blankDocument?.descriptionPresent, false);
+
   const document = normalizeIssue({
     key: "EX-1",
-    fields: { description: { type: "doc", version: 1, content: [{ type: "p" }] } },
+    fields: {
+      description: {
+        type: "doc",
+        version: 1,
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "What has to happen." }],
+          },
+        ],
+      },
+    },
   });
   assert.equal(document?.descriptionPresent, true);
 
@@ -134,7 +165,10 @@ test("the status category is read from the status", () => {
   assert.equal(todo?.statusCategory, "new");
 
   const unknown = normalizeIssue({ key: "EX-1", fields: { status: { name: "Odd" } } });
-  assert.equal(unknown?.statusCategory, "indeterminate");
+  assert.equal(unknown?.statusCategory, undefined);
+
+  const missing = normalizeIssue({ key: "EX-1", fields: {} });
+  assert.equal(missing?.statusCategory, undefined);
 });
 
 test("an issue without a key is dropped", () => {

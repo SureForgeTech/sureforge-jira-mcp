@@ -8,11 +8,6 @@ const options: HygieneOptions = {
   now: NOW,
 };
 
-/** The details of the findings, so a test can say which problem it means. */
-function details(issues: Parameters<typeof findHygieneProblems>[0]): string[] {
-  return findHygieneProblems(issues, options).map((finding) => finding.detail);
-}
-
 test("an issue without a summary is reported", () => {
   const findings = findHygieneProblems(
     [makeIssue({ key: "EX-1", summary: "", priority: "Medium" })],
@@ -65,6 +60,7 @@ test("work in progress without an assignee is reported as high severity", () => 
         key: "EX-1",
         status: "In Progress",
         statusCategory: "indeterminate",
+        assignee: undefined,
       }),
     ],
     options,
@@ -74,6 +70,47 @@ test("work in progress without an assignee is reported as high severity", () => 
   );
   assert.ok(finding);
   assert.equal(finding.severity, "high");
+});
+
+test("a resolved issue in an open status is not reported as work without an owner", () => {
+  const findings = findHygieneProblems(
+    [
+      makeIssue({
+        key: "EX-1",
+        status: "In Progress",
+        statusCategory: "indeterminate",
+        assignee: undefined,
+        resolution: "Done",
+      }),
+    ],
+    options,
+  );
+  assert.deepEqual(
+    findings.filter((entry) => entry.detail.includes("no assignee")),
+    [],
+  );
+});
+
+test("an issue whose status category is unknown is not read as work in progress", () => {
+  const findings = findHygieneProblems(
+    [
+      makeIssue({
+        key: "EX-1",
+        status: "In Progress",
+        statusCategory: undefined,
+        assignee: undefined,
+      }),
+    ],
+    options,
+  );
+  assert.deepEqual(
+    findings.filter(
+      (entry) =>
+        entry.detail.includes("no assignee") ||
+        entry.detail.includes("without an update"),
+    ),
+    [],
+  );
 });
 
 test("work in progress with an assignee is not reported for it", () => {

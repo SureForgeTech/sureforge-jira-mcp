@@ -24,8 +24,8 @@ const TYPES_WITHOUT_DESCRIPTION = new Set(["Sub-task", "Subtask", "sub-task"]);
 /**
  * Whether a due date has passed.
  *
- * A due date without a time is read as the end of that day, so an issue that
- * is due today is not overdue until tomorrow.
+ * A due date without a time is read as the end of that day in UTC, so an
+ * issue that is due today is not overdue until tomorrow.
  */
 function isOverdue(dueDate: string, now: Date): boolean {
   const parsed = Date.parse(dueDate);
@@ -43,6 +43,10 @@ function isOverdue(dueDate: string, now: Date): boolean {
  * Find the issues that are not kept well enough to be worked on.
  *
  * Six problems are reported:
+ *
+ * The rules that need to know whether work is in progress only fire when the
+ * status category is known. A site that does not report the category leaves
+ * that unknown, and an unknown category is not work in progress.
  *
  * - an issue without a summary, which no report can name;
  * - an issue without a description, which nobody can act on;
@@ -83,7 +87,11 @@ export function findHygieneProblems(
       });
     }
 
-    if (issue.statusCategory === "indeterminate" && issue.assignee === undefined) {
+    if (
+      issue.statusCategory === "indeterminate" &&
+      issue.assignee === undefined &&
+      issue.resolution === undefined
+    ) {
       findings.push({
         category: "issue-hygiene",
         issueKey: issue.key,
@@ -120,7 +128,10 @@ export function findHygieneProblems(
       });
     }
 
-    if (issue.statusCategory === "indeterminate" && issue.resolution === undefined) {
+    if (
+      issue.statusCategory === "indeterminate" &&
+      issue.resolution === undefined
+    ) {
       const age = daysSince(issue.updated, options.now);
       if (age !== undefined && age >= options.staleInProgressDays) {
         findings.push({

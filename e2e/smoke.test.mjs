@@ -215,7 +215,12 @@ test("the built server answers the health tools over stdio", async (t) => {
     await client.callTool({ name: "jira_health_summary", arguments: {} }),
   );
   assert.equal(summary.status, "needs-attention");
-  assert.equal(summary.total, 2);
+  // The summary counts the hygiene findings as well: the mock issues carry no
+  // description and no priority, so they add four findings to the two
+  // structural ones.
+  assert.equal(summary.total, 6);
+  assert.equal(summary.byCategory["issue-hygiene"], 4);
+  assert.equal(summary.byCategory["orphaned-issue"], 1);
   assert.equal(summary.projectKey, "EXAMPLE");
   assert.equal(
     summary.truncated,

@@ -61,8 +61,12 @@ export interface Issue {
    * It is `new` for a status like `To Do`, `indeterminate` for a status like
    * `In Progress` and `done` for a status like `Done`. The names of the
    * statuses themselves differ from site to site, the categories do not.
+   *
+   * It is undefined when the site did not report a category: an older
+   * Jira Server omits it, and a rule must not read an unknown category as
+   * work in progress.
    */
-  readonly statusCategory: StatusCategory;
+  readonly statusCategory?: StatusCategory;
   /** The due date, as an ISO 8601 date, when the issue has one. */
   readonly dueDate?: string;
 }
@@ -178,8 +182,7 @@ export type FindingCategory =
   | "missing-release-version"
   | "stale-blocker"
   | "broken-hierarchy"
-  | "issue-hygiene"
-  | "workflow-problem";
+  | "issue-hygiene";
 
 /** One health finding. */
 export interface Finding {

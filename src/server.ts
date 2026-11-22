@@ -1,7 +1,7 @@
 /**
  * The MCP server.
  *
- * The server publishes six read-only tools over the health rules: one per
+ * The server publishes seven read-only tools over the health rules: one per
  * problem the product names, plus the aggregate summary. Every tool reads
  * the project through the client and returns findings as JSON.
  */
@@ -309,6 +309,14 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           .describe(
             "How many levels deep a hierarchy may be. Defaults to the configured limit.",
           ),
+        staleInProgressDays: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "How many days without an update make work in progress stale. Defaults to the configured threshold.",
+          ),
       }),
     },
     async (args) => {
@@ -341,7 +349,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
         staleInProgressDays: z
           .number()
           .int()
-          .nonnegative()
+          .positive()
           .optional()
           .describe(
             "How many days without an update make work in progress stale. Defaults to the configured threshold.",
@@ -435,6 +443,14 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           .describe(
             "How many levels deep a hierarchy may be. Defaults to the configured limit.",
           ),
+        staleInProgressDays: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "How many days without an update make work in progress stale. Defaults to the configured threshold.",
+          ),
       }),
     },
     async (args) => {
@@ -459,6 +475,11 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           now: now(),
           listingComplete,
           epicLinkKnown,
+        }),
+        ...findHygieneProblems(issues, {
+          staleInProgressDays:
+            args.staleInProgressDays ?? options.staleInProgressDays,
+          now: now(),
         }),
       ];
       const summary = summarizeHealth(findings, { limit: args.limit ?? 10 });

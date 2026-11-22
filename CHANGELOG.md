@@ -24,7 +24,7 @@ project uses semantic versioning.
   search paths now answers the error of the last path tried, the version 2
   one.
 - The configuration comes from the environment only: the site, the account,
-  the API token, the project and the two thresholds. The token is redacted
+  the API token, the project and the three thresholds. The token is redacted
   from every message.
 - `JIRA_EPIC_LINK_FIELD` names the Epic Link field, `customfield_10014` by
   default. A site that refuses the field is read without it, and the result

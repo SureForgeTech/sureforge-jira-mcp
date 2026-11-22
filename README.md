@@ -17,9 +17,10 @@ The server only reads. It never changes an issue, and it never writes to Jira.
 | `jira_find_issue_hygiene_problems` | The issues that are not kept well enough to be worked on: no summary, no description, work in progress without an assignee, no priority, a due date that has passed while the issue is still open, and work in progress that has not been updated for the staleness threshold. |
 
 Every tool that reports findings takes an optional `projectKey`, an optional
-`limit`, and the thresholds that apply to it (`staleDays`, `maxDepth`). The
-findings are ordered worst first. `jira_check_installation` reports on the
-installation rather than on findings, so it takes only `projectKey`.
+`limit`, and the thresholds that apply to it (`staleDays`, `maxDepth`,
+`staleInProgressDays`). The findings are ordered worst first.
+`jira_check_installation` reports on the installation rather than on findings,
+so it takes only `projectKey`.
 
 Every tool that reads issues carries `issuesExamined`, the number of issues
 it looked at. A listing reads at most 2000 issues per project. When the listing may be
@@ -53,7 +54,9 @@ enough to be worked on, the defects Atlassian's own Jira guidance calls out:
 
 Whether work is in progress is decided by the status *category* Jira groups
 the status in (`new`, `indeterminate`, `done`), not by the name of the status,
-because the names differ from site to site.
+because the names differ from site to site. A site that reports no category
+at all leaves that unknown, and an unknown category is not work in progress.
+A due date without a time is read as the end of that day in UTC.
 
 ## Deployment and installation
 

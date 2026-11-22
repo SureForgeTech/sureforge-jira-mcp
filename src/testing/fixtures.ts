@@ -26,6 +26,7 @@ export function makeIssue(
     issueLinks: [],
     descriptionPresent: true,
     statusCategory: "new" as const,
+    assignee: "A Person",
     ...overrides,
   };
 }
