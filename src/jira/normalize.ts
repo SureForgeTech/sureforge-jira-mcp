@@ -319,7 +319,10 @@ const CONTAINER_NODE_TYPES = new Set([
   "mediaGroup",
   "expand",
   "taskList",
+  "taskItem",
   "decisionList",
+  "decisionItem",
+  "mediaSingle",
 ]);
 
 /**

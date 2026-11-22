@@ -33,10 +33,10 @@ project uses semantic versioning.
 
 - `jira_find_workflow_problems` reports the issues where the workflow and the
   issue disagree: an issue that is closed without a resolution, an issue that
-  is resolved while its status is still open, and a closed parent whose
-  sub-task is still open. A status the site does not classify proves nothing,
-  so no rule reports an issue as open, closed or unfinished when the site did
-  not say.
+  is resolved while its status is still open, and a closed issue with a child
+  that is still open, whether the child hangs under a parent or under an
+  epic. A status the site does not classify proves nothing, so no rule
+  reports an issue as open, closed or unfinished when the site did not say.
 - `jira_find_issue_hygiene_problems` reports the issues that are not kept well
   enough to be worked on: no summary, no description, work in progress without
   an assignee, no priority, a due date that has passed while the issue is still

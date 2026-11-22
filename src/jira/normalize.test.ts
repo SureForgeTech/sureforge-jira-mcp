@@ -124,6 +124,20 @@ test("a document that holds an empty container holds no description", () => {
   assert.equal(emptyPanel?.descriptionPresent, false);
 });
 
+test("a document that holds an empty task item holds no description", () => {
+  const issue = normalizeIssue({
+    key: "EX-1",
+    fields: {
+      description: {
+        type: "doc",
+        version: 1,
+        content: [{ type: "taskList", content: [{ type: "taskItem" }] }],
+      },
+    },
+  });
+  assert.equal(issue?.descriptionPresent, false);
+});
+
 test("a document that holds a list with something in it holds a description", () => {
   const issue = normalizeIssue({
     key: "EX-1",

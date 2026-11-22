@@ -110,7 +110,7 @@ test("an open parent with an open child is not reported", () => {
   assert.deepEqual(findings, []);
 });
 
-test("the rule about a closed parent holds on an incomplete listing", () => {
+test("the rule about a closed issue with open work under it holds on a partial listing", () => {
   // The rule needs nothing but the two issues it names, both of which were
   // read, so a listing that may be missing other issues does not silence it.
   const findings = findWorkflowProblems([
@@ -186,7 +186,7 @@ test("a closed parent with several open children is reported once per child", ()
   }
 });
 
-test("a closed epic with an open task is not reported: the parent relation is followed", () => {
+test("a closed epic with an open task is reported: the epic relation counts too", () => {
   const findings = findWorkflowProblems([
     makeIssue({
       key: "EX-1",
@@ -196,7 +196,9 @@ test("a closed epic with an open task is not reported: the parent relation is fo
     }),
     makeIssue({ key: "EX-2", epicKey: "EX-1", statusCategory: "new" }),
   ]);
-  assert.deepEqual(findings, []);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].issueKey, "EX-1");
+  assert.deepEqual([...findings[0].relatedKeys], ["EX-2"]);
 });
 
 test("a closed parent whose child was not read is not reported", () => {
