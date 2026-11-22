@@ -43,6 +43,8 @@ project uses semantic versioning.
 - The description and the assignee are only asked for by the tools that read
   them, so the other tools do not download the text of every description of
   every issue.
+- The hygiene rules report the work that is not finished, and an issue counts
+  as assigned when the account is there, even when the site names nobody.
 - `jira_check_installation` reports the health of the installation: the
   deployment type and version of the instance, the health checks the instance
   reports about itself, whether the project can be read, the support status of

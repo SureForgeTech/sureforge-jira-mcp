@@ -59,13 +59,11 @@ export interface Issue {
   /** The priority name, when the issue has one. */
   readonly priority?: string;
   /**
-   * The name of the account the issue is assigned to.
+   * Whether the issue is assigned to an account.
    *
-   * It is undefined when the site does not name the assignee, even when the
-   * issue is assigned: the presence is what `assigned` says.
+   * The presence of the account is what says so: a site that names nobody -
+   * an anonymized profile, a deleted account - still assigns the issue.
    */
-  readonly assignee?: string;
-  /** Whether the issue is assigned to an account. */
   readonly assigned: boolean;
   /** Whether the issue carries a description with content. */
   readonly descriptionPresent: boolean;

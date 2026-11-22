@@ -19,7 +19,6 @@ export function makeIssue(
     status: "To Do",
     issueType: "Task",
     subTask: false,
-    assigned: true,
     fixVersions: [],
     labels: [],
     created: "2026-01-01T00:00:00.000Z",
@@ -28,7 +27,7 @@ export function makeIssue(
     issueLinks: [],
     descriptionPresent: true,
     statusCategory: "new" as const,
-    assignee: "A Person",
+    assigned: true,
     ...overrides,
   };
 }

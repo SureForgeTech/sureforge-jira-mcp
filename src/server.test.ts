@@ -398,7 +398,6 @@ test("the hygiene tool reports the issues that are not kept well enough", async 
             priority: "Medium",
             status: "In Progress",
             statusCategory: "indeterminate",
-            assignee: undefined,
             assigned: false,
           }),
         ],

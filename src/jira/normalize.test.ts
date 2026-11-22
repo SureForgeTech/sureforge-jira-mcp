@@ -65,24 +65,24 @@ test("both link directions are kept", () => {
   });
 });
 
-test("the assignee is read from the account", () => {
+test("the presence of the account says that the issue is assigned", () => {
   const named = normalizeIssue({
     key: "EX-1",
     fields: { assignee: { displayName: "A Person", accountId: "abc" } },
   });
-  assert.equal(named?.assignee, "A Person");
+  assert.equal(named?.assigned, true);
 
   const legacy = normalizeIssue({
     key: "EX-1",
     fields: { assignee: { name: "aperson", key: "aperson" } },
   });
-  assert.equal(legacy?.assignee, "aperson");
+  assert.equal(legacy?.assigned, true);
 
   const unassigned = normalizeIssue({
     key: "EX-1",
     fields: { assignee: null },
   });
-  assert.equal(unassigned?.assignee, undefined);
+  assert.equal(unassigned?.assigned, false);
 });
 
 test("an assignee the site does not name is still an assignee", () => {
@@ -91,13 +91,25 @@ test("an assignee the site does not name is still an assignee", () => {
     fields: { assignee: { accountId: "5b10a2844c20165700ede21g" } },
   });
   assert.equal(issue?.assigned, true);
-  assert.equal(issue?.assignee, "5b10a2844c20165700ede21g");
 });
 
 test("an unassigned issue is not assigned", () => {
   const issue = normalizeIssue({ key: "EX-1", fields: { assignee: null } });
   assert.equal(issue?.assigned, false);
-  assert.equal(issue?.assignee, undefined);
+});
+
+test("a description that holds only an attachment counts as a description", () => {
+  const media = normalizeIssue({
+    key: "EX-1",
+    fields: {
+      description: {
+        type: "doc",
+        version: 1,
+        content: [{ type: "media", attrs: { id: "x" } }],
+      },
+    },
+  });
+  assert.equal(media?.descriptionPresent, true);
 });
 
 test("the sub-task flag is read from the issue type", () => {

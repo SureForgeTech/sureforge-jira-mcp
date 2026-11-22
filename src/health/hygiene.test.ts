@@ -60,7 +60,6 @@ test("work in progress without an assignee is reported as high severity", () => 
         key: "EX-1",
         status: "In Progress",
         statusCategory: "indeterminate",
-        assignee: undefined,
         assigned: false,
       }),
     ],
@@ -80,7 +79,6 @@ test("a resolved issue in an open status is not reported as work without an owne
         key: "EX-1",
         status: "In Progress",
         statusCategory: "indeterminate",
-        assignee: undefined,
         assigned: false,
         resolution: "Done",
       }),
@@ -100,7 +98,6 @@ test("an issue whose status category is unknown is not read as work in progress"
         key: "EX-1",
         status: "In Progress",
         statusCategory: undefined,
-        assignee: undefined,
         assigned: false,
       }),
     ],
@@ -123,7 +120,7 @@ test("work in progress with an assignee is not reported for it", () => {
         key: "EX-1",
         status: "In Progress",
         statusCategory: "indeterminate",
-        assignee: "A Person",
+        assigned: true,
       }),
     ],
     options,
@@ -279,7 +276,7 @@ test("a well kept issue is reported for nothing", () => {
         summary: "A well kept issue",
         descriptionPresent: true,
         priority: "Medium",
-        assignee: "A Person",
+        assigned: true,
         statusCategory: "done",
         resolution: "Done",
       }),
@@ -360,7 +357,6 @@ test("an issue assigned to an account the site does not name is not unowned", ()
         key: "EX-1",
         status: "In Progress",
         statusCategory: "indeterminate",
-        assignee: undefined,
         assigned: true,
       }),
     ],
@@ -392,5 +388,45 @@ test("a sub-task is exempt from the description rule but not from the others", (
   assert.ok(
     findings.some((entry) => entry.detail.includes("no priority")),
     "the other rules still apply",
+  );
+});
+
+test("a finished issue is not reported at all", () => {
+  const findings = findHygieneProblems(
+    [
+      makeIssue({
+        key: "EX-1",
+        summary: "",
+        descriptionPresent: false,
+        priority: undefined,
+        status: "Done",
+        statusCategory: "done",
+        resolution: "Done",
+      }),
+    ],
+    options,
+  );
+  assert.deepEqual(
+    findings,
+    [],
+    "work nobody has to work on any more is not a problem",
+  );
+});
+
+test("an issue whose status category is unknown is not reported as overdue", () => {
+  const findings = findHygieneProblems(
+    [
+      makeIssue({
+        key: "EX-1",
+        dueDate: "2026-02-01",
+        status: "Closed",
+        statusCategory: undefined,
+      }),
+    ],
+    options,
+  );
+  assert.deepEqual(
+    findings.filter((entry) => entry.detail.includes("still open")),
+    [],
   );
 });

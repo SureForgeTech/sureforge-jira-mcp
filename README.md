@@ -48,7 +48,10 @@ enough to be worked on, the defects Atlassian's own Jira guidance calls out:
 - **work in progress without an assignee** - nobody owns the work;
 - **no priority** - the issue is never scheduled;
 - **a due date that has passed** while the issue is still open - a commitment
-  that was missed;
+  that was missed. An issue whose status is in the category Jira groups the
+  finished statuses in counts as finished, even when its resolution field is
+  empty, and an issue whose status category the site does not report is not
+  reported as open at all;
 - **work in progress that has not been updated** for the staleness threshold
   (`JIRA_STALE_IN_PROGRESS_DAYS`, 30 days by default).
 
@@ -57,6 +60,12 @@ the status in (`new`, `indeterminate`, `done`), not by the name of the status,
 because the names differ from site to site. A site that reports no category
 at all leaves that unknown, and an unknown category is not work in progress.
 A due date without a time is read as the end of that day in UTC.
+
+The rules report the work that is not finished: an issue that carries a
+resolution, or whose status is in the category Jira groups the finished
+statuses in, is left alone. An issue that is assigned to an account the site
+does not name - an anonymized profile, a deleted account - counts as
+assigned, because the account is there.
 
 ## Deployment and installation
 

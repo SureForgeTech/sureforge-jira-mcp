@@ -200,7 +200,6 @@ export function normalizeIssue(
         .filter((name): name is string => name !== undefined)
     : [];
   const statusCategory = statusCategoryOf(fields.status);
-  const assignee = assigneeOf(fields.assignee);
   const labels = Array.isArray(fields.labels)
     ? fields.labels.filter((label): label is string => typeof label === "string")
     : [];
@@ -245,8 +244,7 @@ export function normalizeIssue(
     ...(text(fields.duedate) === undefined
       ? {}
       : { dueDate: text(fields.duedate) }),
-    ...(assignee === undefined ? {} : { assignee: assignee.name }),
-    assigned: assignee !== undefined,
+    assigned: assigneeOf(fields.assignee),
     descriptionPresent: hasContent(fields.description),
   };
 }
@@ -279,29 +277,17 @@ function statusCategoryOf(status: unknown): StatusCategory | undefined {
  * is only used for the message, and a site that names nobody - an
  * anonymized profile, a deleted account - still assigns the issue.
  */
-function assigneeOf(assignee: unknown): { name?: string } | undefined {
-  if (assignee === null || typeof assignee !== "object") {
-    return undefined;
-  }
-  const account = assignee as {
-    displayName?: unknown;
-    name?: unknown;
-    key?: unknown;
-    accountId?: unknown;
-  };
-  const name =
-    text(account.displayName) ??
-    text(account.name) ??
-    text(account.key) ??
-    text(account.accountId);
-  return name === undefined ? {} : { name };
+function assigneeOf(assignee: unknown): boolean {
+  return assignee !== null && typeof assignee === "object";
 }
 
 /**
  * Whether a field carries content.
  *
  * A description is a document on Jira Cloud and a string on Jira Server. An
- * empty document and an empty string are both no description.
+ * empty document and an empty string are both no description. A document
+ * that holds an attachment - a bug report that is one screenshot - carries
+ * content even though it holds no text.
  */
 export function hasContent(value: unknown): boolean {
   if (value === null || value === undefined) {
@@ -314,14 +300,25 @@ export function hasContent(value: unknown): boolean {
     return value.some((entry) => hasContent(entry));
   }
   if (typeof value === "object") {
-    const content = (value as { content?: unknown }).content;
+    const node = value as { type?: unknown; content?: unknown; text?: unknown };
+    const type = text(node.type);
+    if (
+      type !== undefined &&
+      type !== "paragraph" &&
+      type !== "text" &&
+      type !== "doc"
+    ) {
+      // A node that is not a paragraph holds something of its own: an
+      // attachment, a table, a rule.
+      return true;
+    }
+    const content = node.content;
     if (Array.isArray(content)) {
       return content.some((entry) => hasContent(entry));
     }
-    // A document without a content array carries no text either.
-    const text_ = (value as { text?: unknown }).text;
-    if (typeof text_ === "string") {
-      return text_.trim().length > 0;
+    const nodeText = node.text;
+    if (typeof nodeText === "string") {
+      return nodeText.trim().length > 0;
     }
     return false;
   }

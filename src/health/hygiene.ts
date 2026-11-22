@@ -27,15 +27,30 @@ const TYPES_WITHOUT_DESCRIPTION = new Set([
 ]);
 
 /**
- * Whether an issue is still open.
+ * Whether an issue is finished.
+ *
+ * An issue is finished when it carries a resolution or when its status is in
+ * the category Jira groups the finished statuses in: a workflow that closes
+ * an issue without setting a resolution leaves the work finished but the
+ * field empty.
+ */
+function isFinished(issue: Issue): boolean {
+  return issue.resolution !== undefined || issue.statusCategory === "done";
+}
+
+/**
+ * Whether an issue is known to be open.
  *
  * An issue is open while it has no resolution and its status is not in the
- * category Jira groups the finished statuses in: a workflow that closes an
- * issue without setting a resolution leaves the work finished but the field
- * empty.
+ * category Jira groups the finished statuses in. A site that reports no
+ * status category leaves that unknown, and an unknown issue is not reported
+ * as open.
  */
 function isOpen(issue: Issue): boolean {
   if (issue.resolution !== undefined) {
+    return false;
+  }
+  if (issue.statusCategory === undefined) {
     return false;
   }
   return issue.statusCategory !== "done";
@@ -82,6 +97,13 @@ export function findHygieneProblems(
   const findings: Finding[] = [];
 
   for (const issue of issues) {
+    // The rules that are about the data itself apply to work that is not
+    // finished: an issue nobody has to work on any more is not a problem for
+    // the team that has to work on it.
+    if (isFinished(issue)) {
+      continue;
+    }
+
     if (issue.summary.trim() === "") {
       findings.push({
         category: "issue-hygiene",
