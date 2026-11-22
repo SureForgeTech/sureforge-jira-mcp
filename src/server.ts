@@ -383,7 +383,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     {
       title: "Find the issues where the workflow and the issue disagree",
       description:
-        "Find the issues where the workflow and the issue disagree: an issue that is closed without a resolution, an issue that is resolved while its status is still open, and a closed issue with a child that is still open.",
+        "Find the issues where the workflow and the issue disagree: an issue that is closed without a resolution, an issue that is resolved while its status is still open, and a closed issue with a child that is not finished.",
       inputSchema: toolInput,
     },
     async (args) => {

@@ -56,7 +56,10 @@ export function issuesPointingAt(
     if (issue.parentKey !== undefined) {
       add(issue.parentKey, issue.key);
     }
-    if (issue.epicKey !== undefined) {
+    // A sub-task of an epic names the same issue as its parent and as its
+    // epic. The relation is counted once, the way a link that Jira reports
+    // from both ends is counted once.
+    if (issue.epicKey !== undefined && issue.epicKey !== issue.parentKey) {
       add(issue.epicKey, issue.key);
     }
   }

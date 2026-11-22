@@ -45,8 +45,8 @@ function isUnfinished(issue: Issue): boolean {
  *   of the project do not count it;
  * - an issue that carries a resolution while its status is still an open one,
  *   so the two say different things about the work;
- * - a closed issue with a child that is still open, so work that is still to
- *   be done hides under a parent or an epic that says it is finished.
+ * - a closed issue with a child that is not finished, so work that is still
+ *   to be done hides under a parent or an epic that says it is finished.
  *
  * Both relations are followed: the parent of a sub-task and the epic of a
  * task. A closed epic with an open task under it is the same problem as a
