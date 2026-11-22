@@ -124,6 +124,28 @@ test("a document that holds an empty container holds no description", () => {
   assert.equal(emptyPanel?.descriptionPresent, false);
 });
 
+test("a document that holds only a rule or a code block holds a description", () => {
+  const rule = normalizeIssue({
+    key: "EX-1",
+    fields: {
+      description: { type: "doc", version: 1, content: [{ type: "rule" }] },
+    },
+  });
+  assert.equal(rule?.descriptionPresent, true);
+
+  const codeBlock = normalizeIssue({
+    key: "EX-1",
+    fields: {
+      description: {
+        type: "doc",
+        version: 1,
+        content: [{ type: "codeBlock", attrs: { language: "text" } }],
+      },
+    },
+  });
+  assert.equal(codeBlock?.descriptionPresent, true);
+});
+
 test("a document that holds an empty heading holds no description", () => {
   const issue = normalizeIssue({
     key: "EX-1",

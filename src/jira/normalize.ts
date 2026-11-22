@@ -324,8 +324,6 @@ const CONTAINER_NODE_TYPES = new Set([
   "decisionItem",
   "mediaSingle",
   "heading",
-  "codeBlock",
-  "rule",
 ]);
 
 /**

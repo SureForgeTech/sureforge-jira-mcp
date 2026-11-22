@@ -47,6 +47,7 @@ project uses semantic versioning.
 - `jira_health_summary` counts the hygiene findings as well, so an agent that
   reads only the summary is not told that a project with hygiene problems is
   free of them.
+- `jira_health_summary` counts the workflow findings as well.
 - The description and the assignee are only asked for by the tools that read
   them, so the other tools do not download the text of every description of
   every issue.
