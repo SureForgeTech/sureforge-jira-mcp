@@ -10,11 +10,12 @@ project uses semantic versioning.
 
 - Project scaffold: the TypeScript build, the declared `npm run check`
   validation command and the server entry point.
-- The MCP server speaks over its standard input and output and publishes seven
+- The MCP server speaks over its standard input and output and publishes eight
   read-only tools: `jira_find_orphaned_issues`,
   `jira_find_missing_release_versions`, `jira_find_stale_blockers`,
   `jira_find_broken_hierarchies`, `jira_health_summary`,
-  `jira_check_installation` and `jira_find_issue_hygiene_problems`.
+  `jira_check_installation`, `jira_find_issue_hygiene_problems` and
+  `jira_find_workflow_problems`.
 - The Jira REST client reads a project and its release versions, falls back to
   the earlier search endpoint when a site does not know the current one, and
   never carries a credential into a message.
@@ -30,6 +31,12 @@ project uses semantic versioning.
   default. A site that refuses the field is read without it, and the result
   says that the epic relation is unknown.
 
+- `jira_find_workflow_problems` reports the issues where the workflow and the
+  issue disagree: an issue that is closed without a resolution, an issue that
+  is resolved while its status is still open, and a closed issue with a child
+  that is not finished, whether the child hangs under a parent or under an
+  epic. A status the site does not classify proves nothing, so no rule
+  reports an issue as open, closed or unfinished when the site did not say.
 - `jira_find_issue_hygiene_problems` reports the issues that are not kept well
   enough to be worked on: no summary, no description, work in progress without
   an assignee, no priority, a due date that has passed while the issue is still
@@ -40,11 +47,14 @@ project uses semantic versioning.
 - `jira_health_summary` counts the hygiene findings as well, so an agent that
   reads only the summary is not told that a project with hygiene problems is
   free of them.
+- `jira_health_summary` counts the workflow findings as well.
 - The description and the assignee are only asked for by the tools that read
   them, so the other tools do not download the text of every description of
   every issue.
 - The hygiene rules report the work that is not finished, and an issue counts
   as assigned when the account is there, even when the site names nobody.
+- A document that holds an empty container holds no description, while an
+  attachment, a table or a rule counts as one.
 - `jira_check_installation` reports the health of the installation: the
   deployment type and version of the instance, the health checks the instance
   reports about itself, whether the project can be read, the support status of

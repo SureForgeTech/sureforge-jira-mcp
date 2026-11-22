@@ -240,8 +240,80 @@ test("the summary counts every category", async () => {
       // only the summary must not be told a project with hygiene problems
       // is free of them.
       "issue-hygiene": 6,
+      "workflow-problem": 0,
     });
     assert.equal(body.total, 12);
+  } finally {
+    await close();
+  }
+});
+
+test("the workflow tool reports a closed issue with open work on a partial listing", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          makeIssue({
+            key: "EX-1",
+            status: "Done",
+            statusCategory: "done",
+            resolution: "Done",
+          }),
+          makeIssue({ key: "EX-2", parentKey: "EX-1", statusCategory: "new" }),
+        ],
+        // The listing may be missing issues, which does not silence a rule
+        // that needs only the two issues it names.
+        truncated: true,
+        dropped: 1,
+        examined: 2,
+        epicLinkKnown: true,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_workflow_problems",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(body.truncated, true);
+    const findings = body.findings as Array<{ issueKey: string }>;
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].issueKey, "EX-1");
+  } finally {
+    await close();
+  }
+});
+
+test("the summary counts the workflow findings", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          makeIssue({
+            key: "EX-1",
+            status: "Done",
+            statusCategory: "done",
+          }),
+        ],
+        truncated: false,
+        dropped: 0,
+        examined: 1,
+        epicLinkKnown: true,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_health_summary",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(
+      (body.byCategory as Record<string, number>)["workflow-problem"],
+      1,
+      "an agent that reads only the summary must see the workflow findings",
+    );
   } finally {
     await close();
   }
@@ -381,6 +453,50 @@ test("a truncated listing softens the orphan finding", async () => {
     }>;
     assert.equal(findings[0].severity, "low");
     assert.match(findings[0].detail, /no issue in the listing of 1 issues/);
+  } finally {
+    await close();
+  }
+});
+
+test("the workflow tool reports the issues that disagree with the workflow", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          makeIssue({
+            key: "EX-1",
+            status: "Done",
+            statusCategory: "done",
+          }),
+          makeIssue({
+            key: "EX-2",
+            status: "In Progress",
+            statusCategory: "indeterminate",
+            resolution: "Fixed",
+          }),
+        ],
+        truncated: false,
+        dropped: 0,
+        examined: 2,
+        epicLinkKnown: true,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_workflow_problems",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(body.projectKey, "EXAMPLE");
+    const findings = body.findings as Array<{ issueKey: string; detail: string }>;
+    assert.equal(findings.length, 2);
+    assert.ok(
+      findings.some((finding) => finding.detail.includes("no resolution")),
+    );
+    assert.ok(
+      findings.some((finding) => finding.detail.includes("resolved as Fixed")),
+    );
   } finally {
     await close();
   }

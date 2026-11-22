@@ -194,7 +194,8 @@ export type FindingCategory =
   | "missing-release-version"
   | "stale-blocker"
   | "broken-hierarchy"
-  | "issue-hygiene";
+  | "issue-hygiene"
+  | "workflow-problem";
 
 /** One health finding. */
 export interface Finding {

@@ -1,6 +1,6 @@
 # sureforge-jira-mcp
 
-MCP server for Jira health: finds orphaned issues, missing release versions, stale blockers, broken hierarchies and the issues that are not kept well enough to be worked on, and reports the health of the installation.
+MCP server for Jira health: finds orphaned issues, missing release versions, stale blockers, broken hierarchies, the issues that are not kept well enough to be worked on and the issues where the workflow and the issue disagree, and reports the health of the installation.
 
 The server only reads. It never changes an issue, and it never writes to Jira.
 
@@ -15,6 +15,7 @@ The server only reads. It never changes an issue, and it never writes to Jira.
 | `jira_health_summary` | The aggregate view: the number of findings per category and severity - the hygiene findings included - the findings to look at first, and a status of `healthy` or `needs-attention`. |
 | `jira_check_installation` | The health of the installation: the deployment type and version of the instance, the health checks the instance reports about itself, whether the project can be read, and the guidance that holds for that deployment. |
 | `jira_find_issue_hygiene_problems` | The issues that are not kept well enough to be worked on: no summary, no description, work in progress without an assignee, no priority, a due date that has passed while the issue is still open, and work in progress that has not been updated for the staleness threshold. |
+| `jira_find_workflow_problems` | The issues where the workflow and the issue disagree: an issue that is closed without a resolution, an issue that is resolved while its status is still open, and a closed issue with a child that is not finished. |
 
 Every tool that reports findings takes an optional `projectKey`, an optional
 `limit`, and the thresholds that apply to it (`staleDays`, `maxDepth`,
@@ -69,6 +70,30 @@ resolution, or whose status is in the category Jira groups the finished
 statuses in, is left alone. An issue that is assigned to an account the site
 does not name - an anonymized profile, a deleted account - counts as
 assigned, because the account is there.
+
+## Workflow consistency
+
+`jira_find_workflow_problems` reports the three ways an issue can disagree
+with itself, which is what Atlassian's guidance on workflows asks for:
+
+- **closed without a resolution** - the status says the work is finished and
+  the resolution field is empty, so the resolution reports of the project do
+  not count it;
+- **resolved but still open** - the issue carries a resolution while its
+  status is still an open one, so the two say different things about the
+  work;
+- **a closed issue with a child that is not finished** - work that is still
+  to be done hides under a parent or an epic that says it is finished. Both
+  relations are followed: the parent of a sub-task and the epic of a task. A
+  child that carries a resolution counts as finished, so it is not reported
+  as work that was left open.
+
+Whether a status is closed is decided by the status category, as everywhere
+else in this server. A site that reports no category leaves that unknown, and
+an unknown status proves nothing: a rule never reports an issue as open, as
+closed or as unfinished when the site did not say. The rule about a closed
+parent needs only the two issues it names, so it fires even when the listing
+is incomplete.
 
 ## Deployment and installation
 

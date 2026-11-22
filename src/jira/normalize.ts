@@ -301,6 +301,32 @@ function isTrue(value: unknown): boolean {
 }
 
 /**
+ * The document node types that hold their children and nothing else.
+ *
+ * A container that holds nothing holds nothing of its own. A node that is
+ * not a container - an attachment, a table, a rule - holds something of its
+ * own even when it holds no text.
+ */
+const CONTAINER_NODE_TYPES = new Set([
+  "doc",
+  "paragraph",
+  "text",
+  "bulletList",
+  "orderedList",
+  "listItem",
+  "panel",
+  "blockquote",
+  "mediaGroup",
+  "expand",
+  "taskList",
+  "taskItem",
+  "decisionList",
+  "decisionItem",
+  "mediaSingle",
+  "heading",
+]);
+
+/**
  * Whether a field carries content.
  *
  * A description is a document on Jira Cloud and a string on Jira Server. An
@@ -321,19 +347,17 @@ export function hasContent(value: unknown): boolean {
   if (typeof value === "object") {
     const node = value as { type?: unknown; content?: unknown; text?: unknown };
     const type = text(node.type);
-    if (
-      type !== undefined &&
-      type !== "paragraph" &&
-      type !== "text" &&
-      type !== "doc"
-    ) {
-      // A node that is not a paragraph holds something of its own: an
-      // attachment, a table, a rule.
-      return true;
-    }
     const content = node.content;
     if (Array.isArray(content)) {
-      return content.some((entry) => hasContent(entry));
+      if (content.some((entry) => hasContent(entry))) {
+        return true;
+      }
+      // An empty container holds nothing of its own; a node that is not a
+      // container holds something of its own: an attachment, a table, a rule.
+      return type !== undefined && !CONTAINER_NODE_TYPES.has(type);
+    }
+    if (type !== undefined && !CONTAINER_NODE_TYPES.has(type)) {
+      return true;
     }
     const nodeText = node.text;
     if (typeof nodeText === "string") {

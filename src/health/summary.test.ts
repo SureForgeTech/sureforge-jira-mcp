@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sortFindings, summarizeHealth } from "./summary.js";
+import { sortFindings, summarizeHealth, SUMMARY_CATEGORIES } from "./summary.js";
 import type { Finding } from "../jira/types.js";
 
 function finding(overrides: Partial<Finding> & { issueKey: string }): Finding {
@@ -38,6 +38,7 @@ test("the summary counts every category, even the empty ones", () => {
     "stale-blocker": 1,
     "broken-hierarchy": 0,
     "issue-hygiene": 0,
+    "workflow-problem": 0,
   });
 });
 
@@ -102,4 +103,12 @@ test("sorting does not change the array it is given", () => {
   const sorted = sortFindings(findings);
   assert.equal(sorted[0].issueKey, "EX-1");
   assert.equal(findings[0].issueKey, "EX-2");
+});
+
+test("the summary counts every category it lists", () => {
+  const summary = summarizeHealth([]);
+  assert.deepEqual(
+    Object.keys(summary.byCategory).sort(),
+    [...SUMMARY_CATEGORIES].sort(),
+  );
 });

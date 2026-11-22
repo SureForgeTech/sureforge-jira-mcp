@@ -1,7 +1,7 @@
 /**
  * The MCP server.
  *
- * The server publishes seven read-only tools over the health rules: one per
+ * The server publishes eight read-only tools over the health rules: one per
  * problem the product names, plus the aggregate summary. Every tool reads
  * the project through the client and returns findings as JSON.
  */
@@ -10,6 +10,7 @@ import type { AnySchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
 import { redact } from "./config.js";
 import { findHygieneProblems } from "./health/hygiene.js";
+import { findWorkflowProblems } from "./health/workflow.js";
 import { checkInstallation } from "./health/install.js";
 import {
   findBrokenHierarchies,
@@ -68,6 +69,7 @@ export const TOOL_NAMES = [
   "jira_health_summary",
   "jira_check_installation",
   "jira_find_issue_hygiene_problems",
+  "jira_find_workflow_problems",
 ] as const;
 
 /** One tool name. */
@@ -377,6 +379,27 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
   );
 
   register(
+    "jira_find_workflow_problems",
+    {
+      title: "Find the issues where the workflow and the issue disagree",
+      description:
+        "Find the issues where the workflow and the issue disagree: an issue that is closed without a resolution, an issue that is resolved while its status is still open, and a closed issue with a child that is not finished.",
+      inputSchema: toolInput,
+    },
+    async (args) => {
+      const projectKey = projectOf(args);
+      const { issues, listing } = await loadIssues(projectKey);
+      const findings = findWorkflowProblems(issues);
+      return {
+        projectKey,
+        count: findings.length,
+        ...listingReport(issues, listing),
+        findings: ranked(findings, args.limit ?? 100),
+      };
+    },
+  );
+
+  register(
     "jira_check_installation",
     {
       title: "Check the health of the installation",
@@ -484,6 +507,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
             args.staleInProgressDays ?? options.staleInProgressDays,
           now: now(),
         }),
+        ...findWorkflowProblems(issues),
       ];
       const summary = summarizeHealth(findings, { limit: args.limit ?? 10 });
       return {
