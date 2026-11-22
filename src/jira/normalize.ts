@@ -13,6 +13,7 @@ import type {
   ProjectSummary,
   ProjectVersion,
   ServerInfo,
+  StatusCategory,
 } from "./types.js";
 
 /** The REST shape of the fields this server reads. */
@@ -21,8 +22,8 @@ interface RawIssue {
   key?: unknown;
   fields?: {
     summary?: unknown;
-    status?: { name?: unknown };
-    issuetype?: { name?: unknown };
+    status?: { name?: unknown; statusCategory?: { key?: unknown } | null };
+    issuetype?: { name?: unknown; subtask?: unknown };
     resolution?: { name?: unknown } | null;
     parent?: { key?: unknown } | null;
     epicLink?: { key?: unknown } | null;
@@ -35,6 +36,13 @@ interface RawIssue {
     issuelinks?: unknown;
     priority?: { name?: unknown } | null;
     duedate?: unknown;
+    description?: unknown;
+    assignee?: {
+      displayName?: unknown;
+      name?: unknown;
+      key?: unknown;
+      accountId?: unknown;
+    } | null;
   };
 }
 
@@ -191,6 +199,7 @@ export function normalizeIssue(
         .map((version) => nameOf(version))
         .filter((name): name is string => name !== undefined)
     : [];
+  const statusCategory = statusCategoryOf(fields.status);
   const labels = Array.isArray(fields.labels)
     ? fields.labels.filter((label): label is string => typeof label === "string")
     : [];
@@ -213,7 +222,9 @@ export function normalizeIssue(
     id: text(issue.id) ?? key,
     summary: text(fields.summary) ?? "",
     status: nameOf(fields.status) ?? "Unknown",
+    ...(statusCategory === undefined ? {} : { statusCategory }),
     issueType: nameOf(fields.issuetype) ?? "Unknown",
+    subTask: isTrue(fields.issuetype?.subtask),
     ...(nameOf(fields.resolution) === undefined
       ? {}
       : { resolution: nameOf(fields.resolution) }),
@@ -233,7 +244,104 @@ export function normalizeIssue(
     ...(text(fields.duedate) === undefined
       ? {}
       : { dueDate: text(fields.duedate) }),
+    assigned: assigneeOf(fields.assignee),
+    descriptionPresent: hasContent(fields.description),
   };
+}
+
+/**
+ * The category Jira groups a status in.
+ *
+ * The three categories are the ones Jira uses for every status. A site that
+ * reports none of them leaves the category unknown, so a rule that needs to
+ * know whether work is open is not told that it is.
+ */
+function statusCategoryOf(status: unknown): StatusCategory | undefined {
+  const key = text(
+    status !== null && typeof status === "object"
+      ? (status as { statusCategory?: { key?: unknown } | null }).statusCategory?.key
+      : undefined,
+  );
+  if (key === "new" || key === "done" || key === "indeterminate") {
+    return key;
+  }
+  // The site did not report a category, so it is unknown rather than
+  // presumed: a rule must not read it as work in progress.
+  return undefined;
+}
+
+/**
+ * The account an issue is assigned to.
+ *
+ * The presence of the account is what says the issue is assigned; the name
+ * is only used for the message, and a site that names nobody - an
+ * anonymized profile, a deleted account - still assigns the issue.
+ */
+function assigneeOf(assignee: unknown): boolean {
+  return assignee !== null && typeof assignee === "object";
+}
+
+/**
+ * Whether a value says yes.
+ *
+ * The REST API sends a boolean here, but a site that sends the string
+ * "true" or the number 1 means the same thing.
+ */
+function isTrue(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value === 1;
+  }
+  if (typeof value === "string") {
+    return value.trim().toLowerCase() === "true";
+  }
+  return false;
+}
+
+/**
+ * Whether a field carries content.
+ *
+ * A description is a document on Jira Cloud and a string on Jira Server. An
+ * empty document and an empty string are both no description. A document
+ * that holds an attachment - a bug report that is one screenshot - carries
+ * content even though it holds no text.
+ */
+export function hasContent(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasContent(entry));
+  }
+  if (typeof value === "object") {
+    const node = value as { type?: unknown; content?: unknown; text?: unknown };
+    const type = text(node.type);
+    if (
+      type !== undefined &&
+      type !== "paragraph" &&
+      type !== "text" &&
+      type !== "doc"
+    ) {
+      // A node that is not a paragraph holds something of its own: an
+      // attachment, a table, a rule.
+      return true;
+    }
+    const content = node.content;
+    if (Array.isArray(content)) {
+      return content.some((entry) => hasContent(entry));
+    }
+    const nodeText = node.text;
+    if (typeof nodeText === "string") {
+      return nodeText.trim().length > 0;
+    }
+    return false;
+  }
+  return true;
 }
 
 /** Normalize a list of REST issues, dropping the ones without a key. */

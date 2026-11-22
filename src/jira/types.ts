@@ -31,6 +31,13 @@ export interface Issue {
   readonly status: string;
   /** The issue type name, for example `Task` or `Sub-task`. */
   readonly issueType: string;
+  /**
+   * Whether the issue type is a sub-task.
+   *
+   * Jira says so with a flag on the type, which is stable; the name of the
+   * type is not.
+   */
+  readonly subTask: boolean;
   /** The resolution name, or `undefined` while the issue is unresolved. */
   readonly resolution?: string;
   /** The key of the parent issue, when the issue has one. */
@@ -51,6 +58,27 @@ export interface Issue {
   readonly issueLinks: readonly IssueLink[];
   /** The priority name, when the issue has one. */
   readonly priority?: string;
+  /**
+   * Whether the issue is assigned to an account.
+   *
+   * The presence of the account is what says so: a site that names nobody -
+   * an anonymized profile, a deleted account - still assigns the issue.
+   */
+  readonly assigned: boolean;
+  /** Whether the issue carries a description with content. */
+  readonly descriptionPresent: boolean;
+  /**
+   * The category of the status, as Jira groups the statuses.
+   *
+   * It is `new` for a status like `To Do`, `indeterminate` for a status like
+   * `In Progress` and `done` for a status like `Done`. The names of the
+   * statuses themselves differ from site to site, the categories do not.
+   *
+   * It is undefined when the site did not report a category: an older
+   * Jira Server omits it, and a rule must not read an unknown category as
+   * work in progress.
+   */
+  readonly statusCategory?: StatusCategory;
   /** The due date, as an ISO 8601 date, when the issue has one. */
   readonly dueDate?: string;
 }
@@ -157,12 +185,16 @@ export interface ProjectSummary {
   readonly issueTypes: readonly string[];
 }
 
+/** The category Jira groups a status in. */
+export type StatusCategory = "new" | "indeterminate" | "done";
+
 /** The categories of finding the health rules produce. */
 export type FindingCategory =
   | "orphaned-issue"
   | "missing-release-version"
   | "stale-blocker"
-  | "broken-hierarchy";
+  | "broken-hierarchy"
+  | "issue-hygiene";
 
 /** One health finding. */
 export interface Finding {

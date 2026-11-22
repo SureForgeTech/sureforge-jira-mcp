@@ -18,12 +18,16 @@ export function makeIssue(
     summary: `Summary for ${overrides.key}`,
     status: "To Do",
     issueType: "Task",
+    subTask: false,
     fixVersions: [],
     labels: [],
     created: "2026-01-01T00:00:00.000Z",
     updated: "2026-01-01T00:00:00.000Z",
     projectKey: "EXAMPLE",
     issueLinks: [],
+    descriptionPresent: true,
+    statusCategory: "new" as const,
+    assigned: true,
     ...overrides,
   };
 }

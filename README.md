@@ -1,6 +1,6 @@
 # sureforge-jira-mcp
 
-MCP server for Jira health: finds orphaned issues, missing release versions, stale blockers and broken hierarchies.
+MCP server for Jira health: finds orphaned issues, missing release versions, stale blockers, broken hierarchies and the issues that are not kept well enough to be worked on, and reports the health of the installation.
 
 The server only reads. It never changes an issue, and it never writes to Jira.
 
@@ -12,13 +12,15 @@ The server only reads. It never changes an issue, and it never writes to Jira.
 | `jira_find_missing_release_versions` | Issues whose release version is missing or wrong: an issue names a version the project does not have, or an issue ships in a release while its parent carries no version. |
 | `jira_find_stale_blockers` | Open issues that block other issues and have not been updated for the staleness threshold or longer. A blocker of work that already ships is reported as high severity. |
 | `jira_find_broken_hierarchies` | Broken issue hierarchies: a parent or epic that does not exist, a parent chain that loops, and a hierarchy deeper than the depth limit. |
-| `jira_health_summary` | The aggregate view: the number of findings per category and severity, the findings to look at first, and a status of `healthy` or `needs-attention`. |
+| `jira_health_summary` | The aggregate view: the number of findings per category and severity - the hygiene findings included - the findings to look at first, and a status of `healthy` or `needs-attention`. |
 | `jira_check_installation` | The health of the installation: the deployment type and version of the instance, the health checks the instance reports about itself, whether the project can be read, and the guidance that holds for that deployment. |
+| `jira_find_issue_hygiene_problems` | The issues that are not kept well enough to be worked on: no summary, no description, work in progress without an assignee, no priority, a due date that has passed while the issue is still open, and work in progress that has not been updated for the staleness threshold. |
 
 Every tool that reports findings takes an optional `projectKey`, an optional
-`limit`, and the thresholds that apply to it (`staleDays`, `maxDepth`). The
-findings are ordered worst first. `jira_check_installation` reports on the
-installation rather than on findings, so it takes only `projectKey`.
+`limit`, and the thresholds that apply to it (`staleDays`, `maxDepth`,
+`staleInProgressDays`). The findings are ordered worst first.
+`jira_check_installation` reports on the installation rather than on findings,
+so it takes only `projectKey`.
 
 Every tool that reads issues carries `issuesExamined`, the number of issues
 it looked at. A listing reads at most 2000 issues per project. When the listing may be
@@ -34,6 +36,39 @@ or when the field holds a value that cannot be an epic relation - free text, a
 number, a list - the result carries `epicLinkKnown: false`, and the findings
 that would state that an issue has no epic are hedged and lower in severity
 instead.
+
+## Issue hygiene
+
+`jira_find_issue_hygiene_problems` reports the issues that are not kept well
+enough to be worked on, the defects Atlassian's own Jira guidance calls out:
+
+- **no summary** - Jira allows it, but no report can name the issue;
+- **no description** - there is nothing for anyone to act on. A sub-task does
+  not need one;
+- **work in progress without an assignee** - nobody owns the work;
+- **no priority** - the issue is never scheduled;
+- **a due date that has passed** while the issue is still open - a commitment
+  that was missed. An issue whose status is in the category Jira groups the
+  finished statuses in counts as finished, even when its resolution field is
+  empty, and an issue whose status category the site does not report is not
+  reported as open at all;
+- **work in progress that has not been updated** for the staleness threshold
+  (`JIRA_STALE_IN_PROGRESS_DAYS`, 30 days by default).
+
+Whether work is in progress is decided by the status *category* Jira groups
+the status in (`new`, `indeterminate`, `done`), not by the name of the status,
+because the names differ from site to site. Only `indeterminate` - the
+category of the statuses like `In Progress` - counts as work in progress: a
+`To Do` issue without an assignee is not reported, because nobody is working
+on it yet. A site that reports no category
+at all leaves that unknown, and an unknown category is not work in progress.
+A due date without a time is read as the end of that day in UTC.
+
+The rules report the work that is not finished: an issue that carries a
+resolution, or whose status is in the category Jira groups the finished
+statuses in, is left alone. An issue that is assigned to an account the site
+does not name - an anonymized profile, a deleted account - counts as
+assigned, because the account is there.
 
 ## Deployment and installation
 
@@ -77,6 +112,7 @@ disk and no credential is ever committed.
 | `JIRA_STALE_DAYS` | no | Days without an update that make a blocker stale. Defaults to 14. |
 | `JIRA_MAX_DEPTH` | no | Levels a hierarchy may have before it is reported. Defaults to 5. |
 | `JIRA_TIMEOUT_MS` | no | The request timeout in milliseconds. Defaults to 15000. |
+| `JIRA_STALE_IN_PROGRESS_DAYS` | no | Days without an update that make work in progress stale. Defaults to 30. |
 | `JIRA_EPIC_LINK_FIELD` | no | The id of the Epic Link field, `customfield_10014` by default. The id is site-specific; a site that refuses the request is read without the field instead of failing. |
 
 Check what is set without printing a value:

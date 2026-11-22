@@ -172,12 +172,22 @@ test("the built server answers the health tools over stdio", async (t) => {
     [
       "jira_check_installation",
       "jira_find_broken_hierarchies",
+      "jira_find_issue_hygiene_problems",
       "jira_find_missing_release_versions",
       "jira_find_orphaned_issues",
       "jira_find_stale_blockers",
       "jira_health_summary",
     ],
   );
+
+  const hygiene = payload(
+    await client.callTool({
+      name: "jira_find_issue_hygiene_problems",
+      arguments: {},
+    }),
+  );
+  assert.equal(hygiene.projectKey, "EXAMPLE");
+  assert.ok(Array.isArray(hygiene.findings));
 
   const installation = payload(
     await client.callTool({ name: "jira_check_installation", arguments: {} }),
@@ -205,7 +215,12 @@ test("the built server answers the health tools over stdio", async (t) => {
     await client.callTool({ name: "jira_health_summary", arguments: {} }),
   );
   assert.equal(summary.status, "needs-attention");
-  assert.equal(summary.total, 2);
+  // The summary counts the hygiene findings as well: the mock issues carry no
+  // description and no priority, so they add four findings to the two
+  // structural ones.
+  assert.equal(summary.total, 6);
+  assert.equal(summary.byCategory["issue-hygiene"], 4);
+  assert.equal(summary.byCategory["orphaned-issue"], 1);
   assert.equal(summary.projectKey, "EXAMPLE");
   assert.equal(
     summary.truncated,

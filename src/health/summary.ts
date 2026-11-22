@@ -3,8 +3,8 @@
  *
  * The summary is the aggregate view: how many findings there are, which
  * category they belong to, how bad they are, and which of them to look at
- * first. It is what a caller reads when it wants one answer rather than five
- * lists.
+ * first. It is what a caller reads when it wants one answer rather than the
+ * lists of every tool.
  */
 import type { Finding, FindingCategory } from "../jira/types.js";
 
@@ -35,6 +35,7 @@ const CATEGORIES: readonly FindingCategory[] = [
   "missing-release-version",
   "stale-blocker",
   "broken-hierarchy",
+  "issue-hygiene",
 ];
 
 /**
@@ -75,6 +76,7 @@ export function summarizeHealth(
     "missing-release-version": 0,
     "stale-blocker": 0,
     "broken-hierarchy": 0,
+    "issue-hygiene": 0,
   };
   const bySeverity = { high: 0, medium: 0, low: 0 };
 

@@ -1,7 +1,7 @@
 /**
  * The MCP server.
  *
- * The server publishes six read-only tools over the health rules: one per
+ * The server publishes seven read-only tools over the health rules: one per
  * problem the product names, plus the aggregate summary. Every tool reads
  * the project through the client and returns findings as JSON.
  */
@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AnySchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
 import { redact } from "./config.js";
+import { findHygieneProblems } from "./health/hygiene.js";
 import { checkInstallation } from "./health/install.js";
 import {
   findBrokenHierarchies,
@@ -31,7 +32,7 @@ import { PACKAGE_NAME, PACKAGE_VERSION } from "./version.js";
 export interface JiraReader {
   listIssues(
     projectKey: string,
-    options?: { jql?: string; maxIssues?: number },
+    options?: { jql?: string; maxIssues?: number; extraFields?: string[] },
   ): Promise<IssueListing>;
   listVersions(projectKey: string): Promise<ProjectVersion[]>;
   /** What the instance reports about itself. */
@@ -50,6 +51,8 @@ export interface HealthServerOptions {
   readonly staleDays: number;
   /** A hierarchy deeper than this many levels is reported. */
   readonly maxDepth: number;
+  /** Days without an update that make work in progress stale. */
+  readonly staleInProgressDays: number;
   /** The clock the staleness rule measures against. */
   readonly now?: () => Date;
   /** The secrets that must never appear in a message. */
@@ -64,6 +67,7 @@ export const TOOL_NAMES = [
   "jira_find_broken_hierarchies",
   "jira_health_summary",
   "jira_check_installation",
+  "jira_find_issue_hygiene_problems",
 ] as const;
 
 /** One tool name. */
@@ -136,16 +140,25 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
    *
    * The listing says whether it covers the whole project, and the rules that
    * depend on the absence of an issue follow that flag.
+   *
+   * The description and the assignee are only asked for when a rule reads
+   * them: the other tools would otherwise download the text of every
+   * description of every issue for nothing.
    */
   const loadIssues = async (
     projectKey: string,
+    extra?: { hygiene?: boolean },
   ): Promise<{
     issues: Issue[];
     listingComplete: boolean;
     epicLinkKnown: boolean;
     listing: IssueListing;
   }> => {
-    const listing = await options.reader.listIssues(projectKey);
+    const listing = await options.reader.listIssues(projectKey, {
+      ...(extra?.hygiene === true
+        ? { extraFields: ["description", "assignee"] }
+        : {}),
+    });
     return {
       issues: [...listing.issues],
       // Two different unknowns, kept apart: a listing may be missing
@@ -328,6 +341,42 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
   );
 
   register(
+    "jira_find_issue_hygiene_problems",
+    {
+      title: "Find the issues that are not kept well enough to be worked on",
+      description:
+        "Find the issues that are not kept well enough to be worked on: no summary, no description, work in progress without an assignee, no priority, a due date that has passed while the issue is still open, and work in progress that has not been updated for the staleness threshold.",
+      inputSchema: toolInput.extend({
+        staleInProgressDays: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "How many days without an update make work in progress stale. Defaults to the configured threshold.",
+          ),
+      }),
+    },
+    async (args) => {
+      const projectKey = projectOf(args);
+      const { issues, listing } = await loadIssues(projectKey, {
+        hygiene: true,
+      });
+      const findings = findHygieneProblems(issues, {
+        staleInProgressDays:
+          args.staleInProgressDays ?? options.staleInProgressDays,
+        now: now(),
+      });
+      return {
+        projectKey,
+        count: findings.length,
+        ...listingReport(issues, listing),
+        findings: ranked(findings, args.limit ?? 100),
+      };
+    },
+  );
+
+  register(
     "jira_check_installation",
     {
       title: "Check the health of the installation",
@@ -397,12 +446,20 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           .describe(
             "How many levels deep a hierarchy may be. Defaults to the configured limit.",
           ),
+        staleInProgressDays: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "How many days without an update make work in progress stale. Defaults to the configured threshold.",
+          ),
       }),
     },
     async (args) => {
       const projectKey = projectOf(args);
       const { issues, listingComplete, epicLinkKnown, listing } =
-        await loadIssues(projectKey);
+        await loadIssues(projectKey, { hygiene: true });
       const versions = await loadVersions(projectKey);
       const findings = [
         ...findOrphanedIssues(issues, {
@@ -421,6 +478,11 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           now: now(),
           listingComplete,
           epicLinkKnown,
+        }),
+        ...findHygieneProblems(issues, {
+          staleInProgressDays:
+            args.staleInProgressDays ?? options.staleInProgressDays,
+          now: now(),
         }),
       ];
       const summary = summarizeHealth(findings, { limit: args.limit ?? 10 });

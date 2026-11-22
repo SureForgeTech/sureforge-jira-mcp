@@ -69,6 +69,7 @@ async function connect(source: JiraReader): Promise<{
     projectKey: "EXAMPLE",
     staleDays: 14,
     maxDepth: 5,
+    staleInProgressDays: 30,
     now: () => NOW,
     secrets: ["example-token-value"],
   });
@@ -235,8 +236,12 @@ test("the summary counts every category", async () => {
       "missing-release-version": 2,
       "stale-blocker": 1,
       "broken-hierarchy": 1,
+      // The summary counts the hygiene findings too: an agent that reads
+      // only the summary must not be told a project with hygiene problems
+      // is free of them.
+      "issue-hygiene": 6,
     });
-    assert.equal(body.total, 6);
+    assert.equal(body.total, 12);
   } finally {
     await close();
   }
@@ -376,6 +381,90 @@ test("a truncated listing softens the orphan finding", async () => {
     }>;
     assert.equal(findings[0].severity, "low");
     assert.match(findings[0].detail, /no issue in the listing of 1 issues/);
+  } finally {
+    await close();
+  }
+});
+
+test("the tools that read the description and the assignee ask for them", async () => {
+  const asked: Array<string[] | undefined> = [];
+  const { client, close } = await connect(
+    reader({
+      listIssues: async (
+        _projectKey: string,
+        options?: { extraFields?: string[] },
+      ) => {
+        asked.push(options?.extraFields);
+        return {
+          issues: ISSUES,
+          truncated: false,
+          dropped: 0,
+          examined: ISSUES.length,
+          epicLinkKnown: true,
+        };
+      },
+    }),
+  );
+  try {
+    await client.callTool({
+      name: "jira_find_issue_hygiene_problems",
+      arguments: {},
+    });
+    await client.callTool({ name: "jira_health_summary", arguments: {} });
+    await client.callTool({
+      name: "jira_find_orphaned_issues",
+      arguments: {},
+    });
+
+    assert.deepEqual(asked[0], ["description", "assignee"]);
+    assert.deepEqual(asked[1], ["description", "assignee"]);
+    assert.equal(
+      asked[2],
+      undefined,
+      "a tool that does not read them does not ask for them",
+    );
+  } finally {
+    await close();
+  }
+});
+
+test("the hygiene tool reports the issues that are not kept well enough", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          makeIssue({
+            key: "EX-1",
+            summary: "",
+            descriptionPresent: false,
+            priority: "Medium",
+            status: "In Progress",
+            statusCategory: "indeterminate",
+            assigned: false,
+          }),
+        ],
+        truncated: false,
+        dropped: 0,
+        examined: 1,
+        epicLinkKnown: true,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_issue_hygiene_problems",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(body.projectKey, "EXAMPLE");
+    const findings = body.findings as Array<{ detail: string }>;
+    assert.ok(findings.some((finding) => finding.detail.includes("no summary")));
+    assert.ok(
+      findings.some((finding) => finding.detail.includes("no description")),
+    );
+    assert.ok(
+      findings.some((finding) => finding.detail.includes("no assignee")),
+    );
   } finally {
     await close();
   }
