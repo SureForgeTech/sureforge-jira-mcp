@@ -39,6 +39,7 @@ test("the summary counts every category, even the empty ones", () => {
     "broken-hierarchy": 0,
     "issue-hygiene": 0,
     "workflow-problem": 0,
+    "release-problem": 0,
   });
 });
 

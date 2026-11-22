@@ -1,7 +1,7 @@
 /**
  * The MCP server.
  *
- * The server publishes eight read-only tools over the health rules: one per
+ * The server publishes nine read-only tools over the health rules: one per
  * problem the product names, plus the aggregate summary. Every tool reads
  * the project through the client and returns findings as JSON.
  */
@@ -10,6 +10,7 @@ import type { AnySchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
 import { redact } from "./config.js";
 import { findHygieneProblems } from "./health/hygiene.js";
+import { findReleaseProblems } from "./health/release.js";
 import { findWorkflowProblems } from "./health/workflow.js";
 import { checkInstallation } from "./health/install.js";
 import {
@@ -70,6 +71,7 @@ export const TOOL_NAMES = [
   "jira_check_installation",
   "jira_find_issue_hygiene_problems",
   "jira_find_workflow_problems",
+  "jira_find_release_problems",
 ] as const;
 
 /** One tool name. */
@@ -400,6 +402,28 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
   );
 
   register(
+    "jira_find_release_problems",
+    {
+      title: "Find the releases that do not say what they should say",
+      description:
+        "Find the releases that do not say what they should say: a version that was released while issues in it were still open, a version that was released without a release date, and a version that holds no issues at all.",
+      inputSchema: toolInput,
+    },
+    async (args) => {
+      const projectKey = projectOf(args);
+      const { issues, listing } = await loadIssues(projectKey);
+      const versions = await loadVersions(projectKey);
+      const findings = findReleaseProblems(issues, versions);
+      return {
+        projectKey,
+        count: findings.length,
+        ...listingReport(issues, listing),
+        findings: ranked(findings, args.limit ?? 100),
+      };
+    },
+  );
+
+  register(
     "jira_check_installation",
     {
       title: "Check the health of the installation",
@@ -508,6 +532,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           now: now(),
         }),
         ...findWorkflowProblems(issues),
+        ...findReleaseProblems(issues, versions),
       ];
       const summary = summarizeHealth(findings, { limit: args.limit ?? 10 });
       return {

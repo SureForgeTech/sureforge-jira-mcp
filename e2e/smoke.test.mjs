@@ -175,6 +175,7 @@ test("the built server answers the health tools over stdio", async (t) => {
       "jira_find_issue_hygiene_problems",
       "jira_find_missing_release_versions",
       "jira_find_orphaned_issues",
+      "jira_find_release_problems",
       "jira_find_stale_blockers",
       "jira_find_workflow_problems",
       "jira_health_summary",
@@ -189,6 +190,12 @@ test("the built server answers the health tools over stdio", async (t) => {
   );
   assert.equal(hygiene.projectKey, "EXAMPLE");
   assert.ok(Array.isArray(hygiene.findings));
+
+  const releases = payload(
+    await client.callTool({ name: "jira_find_release_problems", arguments: {} }),
+  );
+  assert.equal(releases.projectKey, "EXAMPLE");
+  assert.ok(Array.isArray(releases.findings));
 
   const workflow = payload(
     await client.callTool({ name: "jira_find_workflow_problems", arguments: {} }),
@@ -224,10 +231,12 @@ test("the built server answers the health tools over stdio", async (t) => {
   assert.equal(summary.status, "needs-attention");
   // The summary counts the hygiene findings as well: the mock issues carry no
   // description and no priority, so they add four findings to the two
-  // structural ones.
-  assert.equal(summary.total, 6);
+  // structural ones. It counts the release findings too: the mock holds the
+  // version 1.1.0, which has no issues in it.
+  assert.equal(summary.total, 7);
   assert.equal(summary.byCategory["issue-hygiene"], 4);
   assert.equal(summary.byCategory["orphaned-issue"], 1);
+  assert.equal(summary.byCategory["release-problem"], 1);
   assert.equal(summary.projectKey, "EXAMPLE");
   assert.equal(
     summary.truncated,

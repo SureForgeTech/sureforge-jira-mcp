@@ -241,8 +241,11 @@ test("the summary counts every category", async () => {
       // is free of them.
       "issue-hygiene": 6,
       "workflow-problem": 0,
+      // The fixture releases 1.0.0 while EX-4 in it is still open, and it
+      // holds the empty version 2.0.0.
+      "release-problem": 2,
     });
-    assert.equal(body.total, 12);
+    assert.equal(body.total, 14);
   } finally {
     await close();
   }
@@ -280,6 +283,48 @@ test("the workflow tool reports a closed issue with open work on a partial listi
     const findings = body.findings as Array<{ issueKey: string }>;
     assert.equal(findings.length, 1);
     assert.equal(findings[0].issueKey, "EX-1");
+  } finally {
+    await close();
+  }
+});
+
+test("the summary counts the release findings", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          makeIssue({
+            key: "EX-1",
+            fixVersions: ["1.0.0"],
+            statusCategory: "new",
+          }),
+        ],
+        truncated: false,
+        dropped: 0,
+        examined: 1,
+        epicLinkKnown: true,
+      }),
+      listVersions: async () => [
+        {
+          name: "1.0.0",
+          released: true,
+          releaseDate: "2026-02-01",
+          archived: false,
+        },
+      ],
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_health_summary",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(
+      (body.byCategory as Record<string, number>)["release-problem"],
+      1,
+      "an agent that reads only the summary must see the release findings",
+    );
   } finally {
     await close();
   }

@@ -195,7 +195,8 @@ export type FindingCategory =
   | "stale-blocker"
   | "broken-hierarchy"
   | "issue-hygiene"
-  | "workflow-problem";
+  | "workflow-problem"
+  | "release-problem";
 
 /** One health finding. */
 export interface Finding {
