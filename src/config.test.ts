@@ -145,7 +145,7 @@ test("http is refused unless the host is a loopback address", () => {
 
 test("a trailing slash is removed from the base URL", () => {
   assert.equal(
-    assertUsableBaseUrl("https://example.atlassian.net/"),
+    assertUsableBaseUrl("https://example.atlassian.net///"),
     "https://example.atlassian.net",
   );
   assert.equal(

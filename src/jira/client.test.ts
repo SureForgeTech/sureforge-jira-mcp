@@ -79,8 +79,8 @@ test("the base URL loses a trailing slash and a REST suffix", () => {
     "https://example.atlassian.net",
   );
   assert.equal(
-    normalizeBaseUrl("https://example.atlassian.net/rest/api/3/"),
-    "https://example.atlassian.net",
+    normalizeBaseUrl("  https://example.atlassian.net/jira/rest/api/3///  "),
+    "https://example.atlassian.net/jira",
   );
 });
 
