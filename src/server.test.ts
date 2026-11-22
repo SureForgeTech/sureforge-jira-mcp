@@ -372,6 +372,39 @@ test("a truncated listing softens the release finding that holds nothing", async
   }
 });
 
+test("a truncated listing softens the release finding in the summary too", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [],
+        truncated: true,
+        dropped: 1500,
+        examined: 0,
+        epicLinkKnown: true,
+      }),
+      listVersions: async () => [
+        { name: "2.0.0", released: false, archived: false },
+      ],
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_health_summary",
+      arguments: {},
+    });
+    const body = payload(result);
+    const findings = (body.topFindings as Array<{ detail: string }>) ?? [];
+    assert.ok(
+      findings.some((finding) =>
+        finding.detail.includes("does not cover the whole project"),
+      ),
+      "the summary must not claim that a version holds nothing either",
+    );
+  } finally {
+    await close();
+  }
+});
+
 test("the summary counts the release findings", async () => {
   const { client, close } = await connect(
     reader({
