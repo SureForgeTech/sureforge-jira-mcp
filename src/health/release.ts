@@ -3,7 +3,7 @@
  *
  * The other rules look at the issues and at what they point at. These look at
  * the releases themselves, which is where a project goes wrong quietly: a
- * version that was released while work was still open, a version that was
+ * version that was released and still holds open work, a version that was
  * released without a date, and a version that holds nothing at all.
  *
  * The rules are pure functions over normalized issues and versions: no clock,
@@ -63,14 +63,14 @@ export function findReleaseProblems(
     const open = inVersion.filter(isUnfinished);
 
     if (version.released && open.length > 0) {
-      const keys = open.map((issue) => issue.key);
-      const named = keys.slice(0, MAX_NAMED_KEYS);
-      const rest = keys.length - named.length;
+      const allKeys = open.map((issue) => issue.key);
+      const keys = allKeys.slice(0, MAX_NAMED_KEYS);
+      const rest = allKeys.length - keys.length;
       findings.push({
         category: "release-problem",
         issueKey: version.name,
-        summary: `The release ${version.name} still holds ${keys.length} open issue(s).`,
-        detail: `The release ${version.name} still holds ${keys.length} open issue(s): ${named.join(", ")}${rest > 0 ? ` and ${rest} more` : ""}.`,
+        summary: `The release ${version.name} still holds ${allKeys.length} open issue(s).`,
+        detail: `The release ${version.name} still holds ${allKeys.length} open issue(s): ${keys.join(", ")}${rest > 0 ? ` and ${rest} more` : ""}.`,
         severity: "high",
         relatedKeys: keys,
       });

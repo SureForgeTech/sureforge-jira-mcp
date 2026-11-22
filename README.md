@@ -108,9 +108,16 @@ than at the issues:
 - **a version that holds no issues at all** - it will ship nothing.
 
 An issue counts as open when it carries no resolution and its status is not in
-the category Jira groups the finished statuses in. A version that was
-archived is not reported for holding nothing, and on an incomplete listing
-that finding says so instead of claiming the version is empty.
+the category Jira groups the finished statuses in. A status the site does not
+report is not work in progress either, so such an issue holds no release
+open. A version that was archived is not reported for holding nothing, and on
+an incomplete listing that finding says so instead of claiming the version is
+empty.
+
+A version counts as released when the site says it is; the rules that decide
+whether blocked work ships also count a version whose release date has passed.
+Only the issues of this project are read, so a version that is shared with
+another project may hold issues this listing does not show.
 
 ## Deployment and installation
 

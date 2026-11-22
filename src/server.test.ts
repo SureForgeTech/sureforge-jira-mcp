@@ -334,6 +334,44 @@ test("the release tool reports the releases that do not say what they should say
   }
 });
 
+test("a truncated listing softens the release finding that holds nothing", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [],
+        truncated: true,
+        dropped: 1500,
+        examined: 0,
+        epicLinkKnown: true,
+      }),
+      listVersions: async () => [
+        {
+          name: "2.0.0",
+          released: false,
+          archived: false,
+        },
+      ],
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_release_problems",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(body.truncated, true);
+    const findings = body.findings as Array<{ detail: string }>;
+    assert.equal(findings.length, 1);
+    assert.match(
+      findings[0].detail,
+      /does not cover the whole project/,
+      "an incomplete listing cannot prove that the version holds nothing",
+    );
+  } finally {
+    await close();
+  }
+});
+
 test("the summary counts the release findings", async () => {
   const { client, close } = await connect(
     reader({

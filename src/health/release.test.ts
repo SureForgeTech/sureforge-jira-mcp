@@ -188,5 +188,9 @@ test("a release with many open issues names the first ten and counts the rest", 
   assert.ok(finding);
   assert.match(finding.detail, /12 open issue/);
   assert.match(finding.detail, /and 2 more/);
-  assert.equal(finding.relatedKeys.length, 12);
+  assert.equal(
+    finding.relatedKeys.length,
+    10,
+    "a finding names at most ten keys",
+  );
 });

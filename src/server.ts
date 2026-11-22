@@ -406,7 +406,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     {
       title: "Find the releases that do not say what they should say",
       description:
-        "Find the releases that do not say what they should say: a version that was released while issues in it were still open, a version that was released without a release date, and a version that holds no issues at all.",
+        "Find the releases that do not say what they should say: a version that was released and still holds open issues, a version that was released without a release date, and a version that holds no issues at all.",
       inputSchema: toolInput,
     },
     async (args) => {
