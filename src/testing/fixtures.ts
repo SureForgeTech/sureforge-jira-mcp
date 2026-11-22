@@ -18,6 +18,8 @@ export function makeIssue(
     summary: `Summary for ${overrides.key}`,
     status: "To Do",
     issueType: "Task",
+    subTask: false,
+    assigned: true,
     fixVersions: [],
     labels: [],
     created: "2026-01-01T00:00:00.000Z",

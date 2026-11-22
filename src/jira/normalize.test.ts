@@ -85,6 +85,35 @@ test("the assignee is read from the account", () => {
   assert.equal(unassigned?.assignee, undefined);
 });
 
+test("an assignee the site does not name is still an assignee", () => {
+  const issue = normalizeIssue({
+    key: "EX-1",
+    fields: { assignee: { accountId: "5b10a2844c20165700ede21g" } },
+  });
+  assert.equal(issue?.assigned, true);
+  assert.equal(issue?.assignee, "5b10a2844c20165700ede21g");
+});
+
+test("an unassigned issue is not assigned", () => {
+  const issue = normalizeIssue({ key: "EX-1", fields: { assignee: null } });
+  assert.equal(issue?.assigned, false);
+  assert.equal(issue?.assignee, undefined);
+});
+
+test("the sub-task flag is read from the issue type", () => {
+  const subTask = normalizeIssue({
+    key: "EX-1",
+    fields: { issuetype: { name: "Sub-task", subtask: true } },
+  });
+  assert.equal(subTask?.subTask, true);
+
+  const task = normalizeIssue({
+    key: "EX-1",
+    fields: { issuetype: { name: "Task", subtask: false } },
+  });
+  assert.equal(task?.subTask, false);
+});
+
 test("the description is read as present or absent", () => {
   const withText = normalizeIssue({
     key: "EX-1",

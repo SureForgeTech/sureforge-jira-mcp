@@ -76,8 +76,6 @@ const BASE_ISSUE_FIELDS = [
   "issuelinks",
   "priority",
   "duedate",
-  "description",
-  "assignee",
   "project",
 ];
 
@@ -312,7 +310,7 @@ export class JiraClient {
    */
   async listIssues(
     projectKey: string,
-    options?: { jql?: string; maxIssues?: number },
+    options?: { jql?: string; maxIssues?: number; extraFields?: string[] },
   ): Promise<IssueListing> {
     const jql = buildProjectJql(projectKey, options?.jql);
     const limit = Math.min(options?.maxIssues ?? this.maxIssues, this.maxIssues);
@@ -354,9 +352,10 @@ export class JiraClient {
       const search = new URLSearchParams({
         jql,
         maxResults: String(requested),
-        fields: issueFields(
-          epicLinkFieldRefused ? undefined : this.epicLinkField,
-        ),
+        fields: [
+          issueFields(epicLinkFieldRefused ? undefined : this.epicLinkField),
+          ...(options?.extraFields ?? []),
+        ].join(","),
       });
 
       const endpoint = SEARCH_ENDPOINTS[this.searchEndpoint];

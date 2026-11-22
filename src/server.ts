@@ -32,7 +32,7 @@ import { PACKAGE_NAME, PACKAGE_VERSION } from "./version.js";
 export interface JiraReader {
   listIssues(
     projectKey: string,
-    options?: { jql?: string; maxIssues?: number },
+    options?: { jql?: string; maxIssues?: number; extraFields?: string[] },
   ): Promise<IssueListing>;
   listVersions(projectKey: string): Promise<ProjectVersion[]>;
   /** What the instance reports about itself. */
@@ -140,16 +140,25 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
    *
    * The listing says whether it covers the whole project, and the rules that
    * depend on the absence of an issue follow that flag.
+   *
+   * The description and the assignee are only asked for when a rule reads
+   * them: the other tools would otherwise download the text of every
+   * description of every issue for nothing.
    */
   const loadIssues = async (
     projectKey: string,
+    extra?: { hygiene?: boolean },
   ): Promise<{
     issues: Issue[];
     listingComplete: boolean;
     epicLinkKnown: boolean;
     listing: IssueListing;
   }> => {
-    const listing = await options.reader.listIssues(projectKey);
+    const listing = await options.reader.listIssues(projectKey, {
+      ...(extra?.hygiene === true
+        ? { extraFields: ["description", "assignee"] }
+        : {}),
+    });
     return {
       issues: [...listing.issues],
       // Two different unknowns, kept apart: a listing may be missing
@@ -309,14 +318,6 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
           .describe(
             "How many levels deep a hierarchy may be. Defaults to the configured limit.",
           ),
-        staleInProgressDays: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe(
-            "How many days without an update make work in progress stale. Defaults to the configured threshold.",
-          ),
       }),
     },
     async (args) => {
@@ -358,7 +359,9 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, listing } = await loadIssues(projectKey);
+      const { issues, listing } = await loadIssues(projectKey, {
+        hygiene: true,
+      });
       const findings = findHygieneProblems(issues, {
         staleInProgressDays:
           args.staleInProgressDays ?? options.staleInProgressDays,
@@ -456,7 +459,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     async (args) => {
       const projectKey = projectOf(args);
       const { issues, listingComplete, epicLinkKnown, listing } =
-        await loadIssues(projectKey);
+        await loadIssues(projectKey, { hygiene: true });
       const versions = await loadVersions(projectKey);
       const findings = [
         ...findOrphanedIssues(issues, {

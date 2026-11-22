@@ -18,8 +18,28 @@ export interface HygieneOptions {
   readonly now: Date;
 }
 
-/** The issue types that do not need a description. */
-const TYPES_WITHOUT_DESCRIPTION = new Set(["Sub-task", "Subtask", "sub-task"]);
+/** The issue type names that do not need a description. */
+const TYPES_WITHOUT_DESCRIPTION = new Set([
+  "sub-task",
+  "subtask",
+  "sub task",
+  "technical subtask",
+]);
+
+/**
+ * Whether an issue is still open.
+ *
+ * An issue is open while it has no resolution and its status is not in the
+ * category Jira groups the finished statuses in: a workflow that closes an
+ * issue without setting a resolution leaves the work finished but the field
+ * empty.
+ */
+function isOpen(issue: Issue): boolean {
+  if (issue.resolution !== undefined) {
+    return false;
+  }
+  return issue.statusCategory !== "done";
+}
 
 /**
  * Whether a due date has passed.
@@ -75,7 +95,8 @@ export function findHygieneProblems(
 
     if (
       !issue.descriptionPresent &&
-      !TYPES_WITHOUT_DESCRIPTION.has(issue.issueType)
+      !issue.subTask &&
+      !TYPES_WITHOUT_DESCRIPTION.has(issue.issueType.trim().toLowerCase())
     ) {
       findings.push({
         category: "issue-hygiene",
@@ -89,7 +110,7 @@ export function findHygieneProblems(
 
     if (
       issue.statusCategory === "indeterminate" &&
-      issue.assignee === undefined &&
+      !issue.assigned &&
       issue.resolution === undefined
     ) {
       findings.push({
@@ -114,7 +135,7 @@ export function findHygieneProblems(
     }
 
     if (
-      issue.resolution === undefined &&
+      isOpen(issue) &&
       issue.dueDate !== undefined &&
       isOverdue(issue.dueDate, options.now)
     ) {
@@ -138,7 +159,7 @@ export function findHygieneProblems(
           category: "issue-hygiene",
           issueKey: issue.key,
           summary: issue.summary,
-          detail: `The issue has been in ${issue.status} for ${age} days without an update.`,
+          detail: `The issue has not been updated for ${age} days while it is in ${issue.status}.`,
           severity: "medium",
           relatedKeys: [],
         });

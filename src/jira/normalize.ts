@@ -23,7 +23,7 @@ interface RawIssue {
   fields?: {
     summary?: unknown;
     status?: { name?: unknown; statusCategory?: { key?: unknown } | null };
-    issuetype?: { name?: unknown };
+    issuetype?: { name?: unknown; subtask?: unknown };
     resolution?: { name?: unknown } | null;
     parent?: { key?: unknown } | null;
     epicLink?: { key?: unknown } | null;
@@ -199,6 +199,8 @@ export function normalizeIssue(
         .map((version) => nameOf(version))
         .filter((name): name is string => name !== undefined)
     : [];
+  const statusCategory = statusCategoryOf(fields.status);
+  const assignee = assigneeOf(fields.assignee);
   const labels = Array.isArray(fields.labels)
     ? fields.labels.filter((label): label is string => typeof label === "string")
     : [];
@@ -221,10 +223,9 @@ export function normalizeIssue(
     id: text(issue.id) ?? key,
     summary: text(fields.summary) ?? "",
     status: nameOf(fields.status) ?? "Unknown",
-    ...(statusCategoryOf(fields.status) === undefined
-      ? {}
-      : { statusCategory: statusCategoryOf(fields.status) }),
+    ...(statusCategory === undefined ? {} : { statusCategory }),
     issueType: nameOf(fields.issuetype) ?? "Unknown",
+    subTask: fields.issuetype?.subtask === true,
     ...(nameOf(fields.resolution) === undefined
       ? {}
       : { resolution: nameOf(fields.resolution) }),
@@ -244,9 +245,8 @@ export function normalizeIssue(
     ...(text(fields.duedate) === undefined
       ? {}
       : { dueDate: text(fields.duedate) }),
-    ...(assigneeName(fields.assignee) === undefined
-      ? {}
-      : { assignee: assigneeName(fields.assignee) }),
+    ...(assignee === undefined ? {} : { assignee: assignee.name }),
+    assigned: assignee !== undefined,
     descriptionPresent: hasContent(fields.description),
   };
 }
@@ -254,10 +254,9 @@ export function normalizeIssue(
 /**
  * The category Jira groups a status in.
  *
- * The three categories are the ones Jira uses for every status; a site that
- * reports none of them leaves the category `indeterminate`, so a rule that
- * needs to know whether work is open cannot be told apart from a status it
- * does not know.
+ * The three categories are the ones Jira uses for every status. A site that
+ * reports none of them leaves the category unknown, so a rule that needs to
+ * know whether work is open is not told that it is.
  */
 function statusCategoryOf(status: unknown): StatusCategory | undefined {
   const key = text(
@@ -273,8 +272,14 @@ function statusCategoryOf(status: unknown): StatusCategory | undefined {
   return undefined;
 }
 
-/** The name of the account an issue is assigned to. */
-function assigneeName(assignee: unknown): string | undefined {
+/**
+ * The account an issue is assigned to.
+ *
+ * The presence of the account is what says the issue is assigned; the name
+ * is only used for the message, and a site that names nobody - an
+ * anonymized profile, a deleted account - still assigns the issue.
+ */
+function assigneeOf(assignee: unknown): { name?: string } | undefined {
   if (assignee === null || typeof assignee !== "object") {
     return undefined;
   }
@@ -282,10 +287,14 @@ function assigneeName(assignee: unknown): string | undefined {
     displayName?: unknown;
     name?: unknown;
     key?: unknown;
+    accountId?: unknown;
   };
-  return (
-    text(account.displayName) ?? text(account.name) ?? text(account.key)
-  );
+  const name =
+    text(account.displayName) ??
+    text(account.name) ??
+    text(account.key) ??
+    text(account.accountId);
+  return name === undefined ? {} : { name };
 }
 
 /**

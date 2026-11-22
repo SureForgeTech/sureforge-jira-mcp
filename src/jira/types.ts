@@ -31,6 +31,13 @@ export interface Issue {
   readonly status: string;
   /** The issue type name, for example `Task` or `Sub-task`. */
   readonly issueType: string;
+  /**
+   * Whether the issue type is a sub-task.
+   *
+   * Jira says so with a flag on the type, which is stable; the name of the
+   * type is not.
+   */
+  readonly subTask: boolean;
   /** The resolution name, or `undefined` while the issue is unresolved. */
   readonly resolution?: string;
   /** The key of the parent issue, when the issue has one. */
@@ -51,8 +58,15 @@ export interface Issue {
   readonly issueLinks: readonly IssueLink[];
   /** The priority name, when the issue has one. */
   readonly priority?: string;
-  /** The name of the account the issue is assigned to, when it is assigned. */
+  /**
+   * The name of the account the issue is assigned to.
+   *
+   * It is undefined when the site does not name the assignee, even when the
+   * issue is assigned: the presence is what `assigned` says.
+   */
   readonly assignee?: string;
+  /** Whether the issue is assigned to an account. */
+  readonly assigned: boolean;
   /** Whether the issue carries a description with content. */
   readonly descriptionPresent: boolean;
   /**

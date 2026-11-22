@@ -61,6 +61,7 @@ test("work in progress without an assignee is reported as high severity", () => 
         status: "In Progress",
         statusCategory: "indeterminate",
         assignee: undefined,
+        assigned: false,
       }),
     ],
     options,
@@ -80,6 +81,7 @@ test("a resolved issue in an open status is not reported as work without an owne
         status: "In Progress",
         statusCategory: "indeterminate",
         assignee: undefined,
+        assigned: false,
         resolution: "Done",
       }),
     ],
@@ -99,6 +101,7 @@ test("an issue whose status category is unknown is not read as work in progress"
         status: "In Progress",
         statusCategory: undefined,
         assignee: undefined,
+        assigned: false,
       }),
     ],
     options,
@@ -107,7 +110,7 @@ test("an issue whose status category is unknown is not read as work in progress"
     findings.filter(
       (entry) =>
         entry.detail.includes("no assignee") ||
-        entry.detail.includes("without an update"),
+        entry.detail.includes("has not been updated"),
     ),
     [],
   );
@@ -199,7 +202,7 @@ test("work in progress that has not moved for the threshold is reported", () => 
     ],
     options,
   );
-  const finding = findings.find((entry) => entry.detail.includes("without an update"));
+  const finding = findings.find((entry) => entry.detail.includes("has not been updated"));
   assert.ok(finding);
   assert.match(finding.detail, /59 days/);
 });
@@ -217,7 +220,7 @@ test("work in progress that moved recently is not reported", () => {
     options,
   );
   assert.deepEqual(
-    findings.filter((entry) => entry.detail.includes("without an update")),
+    findings.filter((entry) => entry.detail.includes("has not been updated")),
     [],
   );
 });
@@ -235,7 +238,7 @@ test("an issue that is not in progress is never stale", () => {
     options,
   );
   assert.deepEqual(
-    findings.filter((entry) => entry.detail.includes("without an update")),
+    findings.filter((entry) => entry.detail.includes("has not been updated")),
     [],
   );
 });
@@ -253,7 +256,7 @@ test("a threshold of its own is honoured", () => {
     { ...options, staleInProgressDays: 5 },
   );
   assert.ok(
-    findings.some((entry) => entry.detail.includes("without an update")),
+    findings.some((entry) => entry.detail.includes("has not been updated")),
   );
 });
 
@@ -296,4 +299,98 @@ test("every finding names the issue it is about", () => {
     assert.equal(finding.issueKey, "EX-1");
     assert.equal(finding.category, "issue-hygiene");
   }
+});
+
+test("the threshold boundary is the day itself", () => {
+  const exactly = findHygieneProblems(
+    [
+      makeIssue({
+        key: "EX-1",
+        status: "In Progress",
+        statusCategory: "indeterminate",
+        updated: "2026-01-30T00:00:00.000Z",
+      }),
+    ],
+    options,
+  );
+  assert.ok(
+    exactly.some((entry) => entry.detail.includes("has not been updated")),
+    "thirty days is stale",
+  );
+
+  const oneDayLess = findHygieneProblems(
+    [
+      makeIssue({
+        key: "EX-1",
+        status: "In Progress",
+        statusCategory: "indeterminate",
+        updated: "2026-01-31T00:00:00.000Z",
+      }),
+    ],
+    options,
+  );
+  assert.deepEqual(
+    oneDayLess.filter((entry) => entry.detail.includes("has not been updated")),
+    [],
+  );
+});
+
+test("a finished issue in a closed status is not reported as overdue", () => {
+  const findings = findHygieneProblems(
+    [
+      makeIssue({
+        key: "EX-1",
+        dueDate: "2026-02-01",
+        status: "Done",
+        statusCategory: "done",
+      }),
+    ],
+    options,
+  );
+  assert.deepEqual(
+    findings.filter((entry) => entry.detail.includes("still open")),
+    [],
+  );
+});
+
+test("an issue assigned to an account the site does not name is not unowned", () => {
+  const findings = findHygieneProblems(
+    [
+      makeIssue({
+        key: "EX-1",
+        status: "In Progress",
+        statusCategory: "indeterminate",
+        assignee: undefined,
+        assigned: true,
+      }),
+    ],
+    options,
+  );
+  assert.deepEqual(
+    findings.filter((entry) => entry.detail.includes("no assignee")),
+    [],
+  );
+});
+
+test("a sub-task is exempt from the description rule but not from the others", () => {
+  const findings = findHygieneProblems(
+    [
+      makeIssue({
+        key: "EX-1",
+        issueType: "Sub-task",
+        subTask: true,
+        descriptionPresent: false,
+        priority: undefined,
+      }),
+    ],
+    options,
+  );
+  assert.deepEqual(
+    findings.filter((entry) => entry.detail.includes("no description")),
+    [],
+  );
+  assert.ok(
+    findings.some((entry) => entry.detail.includes("no priority")),
+    "the other rules still apply",
+  );
 });

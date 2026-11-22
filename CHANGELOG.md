@@ -37,6 +37,12 @@ project uses semantic versioning.
 - The issue carries its assignee, the presence of a description and the status
   category, so a rule can tell work in progress from work that has not started
   without relying on the names of the statuses.
+- `jira_health_summary` counts the hygiene findings as well, so an agent that
+  reads only the summary is not told that a project with hygiene problems is
+  free of them.
+- The description and the assignee are only asked for by the tools that read
+  them, so the other tools do not download the text of every description of
+  every issue.
 - `jira_check_installation` reports the health of the installation: the
   deployment type and version of the instance, the health checks the instance
   reports about itself, whether the project can be read, the support status of
