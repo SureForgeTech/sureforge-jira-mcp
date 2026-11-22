@@ -12,25 +12,27 @@
  */
 import type { Finding, Issue } from "../jira/types.js";
 
-/** The settings the workflow rules take. */
-export interface WorkflowOptions {
-  /**
-   * Whether the listing covers the whole project.
-   *
-   * A parent that is not in the listing may still exist, so the rule about
-   * a child of a closed parent cannot fire without it.
-   */
-  readonly listingComplete?: boolean;
-}
-
-/** Whether an issue is finished. */
-function isFinished(issue: Issue): boolean {
-  return issue.resolution !== undefined || issue.statusCategory === "done";
-}
-
 /** Whether an issue is closed: its status is in the finished category. */
 function isClosed(issue: Issue): boolean {
   return issue.statusCategory === "done";
+}
+
+/**
+ * Whether an issue is known to be unfinished.
+ *
+ * An issue is finished when it carries a resolution or when its status is in
+ * the category Jira groups the finished statuses in. A site that reports no
+ * status category leaves that unknown, and an issue that is unknown is not
+ * reported as unfinished.
+ */
+function isUnfinished(issue: Issue): boolean {
+  if (issue.resolution !== undefined) {
+    return false;
+  }
+  if (issue.statusCategory === undefined) {
+    return false;
+  }
+  return issue.statusCategory !== "done";
 }
 
 /**
@@ -42,14 +44,13 @@ function isClosed(issue: Issue): boolean {
  *   of the project do not count it;
  * - an issue that carries a resolution while its status is still an open one,
  *   so the two say different things about the work;
- * - a closed parent with a child that is still open, so work that is still to
- *   be done hides under a parent that says it is finished.
+ * - a closed parent with a sub-task that is still open, so work that is
+ *   still to be done hides under a parent that says it is finished.
+ *
+ * The parent relation is the one that is followed: a task under a closed
+ * epic is a different relation, and the rules about hierarchies report it.
  */
-export function findWorkflowProblems(
-  issues: readonly Issue[],
-  options: WorkflowOptions = {},
-): Finding[] {
-  const listingComplete = options.listingComplete ?? true;
+export function findWorkflowProblems(issues: readonly Issue[]): Finding[] {
   const byKey = new Map(issues.map((issue) => [issue.key, issue]));
   const findings: Finding[] = [];
 
@@ -65,7 +66,11 @@ export function findWorkflowProblems(
       });
     }
 
-    if (issue.resolution !== undefined && !isClosed(issue)) {
+    if (
+      issue.resolution !== undefined &&
+      issue.statusCategory !== undefined &&
+      !isClosed(issue)
+    ) {
       findings.push({
         category: "workflow-problem",
         issueKey: issue.key,
@@ -77,14 +82,11 @@ export function findWorkflowProblems(
     }
   }
 
-  if (!listingComplete) {
-    // A parent that was not read cannot be checked, so the rule about a
-    // closed parent with open work does not fire.
-    return findings;
-  }
-
+  // The rule about a closed parent needs nothing but the two issues it
+  // names, so it does not depend on the listing covering the project: both
+  // issues were read, and both say what they say.
   for (const child of issues) {
-    if (child.parentKey === undefined || isFinished(child)) {
+    if (child.parentKey === undefined || !isUnfinished(child)) {
       continue;
     }
     const parent = byKey.get(child.parentKey);

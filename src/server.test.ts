@@ -248,6 +248,40 @@ test("the summary counts every category", async () => {
   }
 });
 
+test("the summary counts the workflow findings", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          makeIssue({
+            key: "EX-1",
+            status: "Done",
+            statusCategory: "done",
+          }),
+        ],
+        truncated: false,
+        dropped: 0,
+        examined: 1,
+        epicLinkKnown: true,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_health_summary",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(
+      (body.byCategory as Record<string, number>)["workflow-problem"],
+      1,
+      "an agent that reads only the summary must see the workflow findings",
+    );
+  } finally {
+    await close();
+  }
+});
+
 test("the summary is healthy when there is nothing to report", async () => {
   const { client, close } = await connect(
     reader({

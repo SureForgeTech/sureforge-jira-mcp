@@ -1,7 +1,7 @@
 /**
  * The MCP server.
  *
- * The server publishes seven read-only tools over the health rules: one per
+ * The server publishes eight read-only tools over the health rules: one per
  * problem the product names, plus the aggregate summary. Every tool reads
  * the project through the client and returns findings as JSON.
  */
@@ -388,8 +388,8 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
     },
     async (args) => {
       const projectKey = projectOf(args);
-      const { issues, listingComplete, listing } = await loadIssues(projectKey);
-      const findings = findWorkflowProblems(issues, { listingComplete });
+      const { issues, listing } = await loadIssues(projectKey);
+      const findings = findWorkflowProblems(issues);
       return {
         projectKey,
         count: findings.length,
@@ -507,7 +507,7 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
             args.staleInProgressDays ?? options.staleInProgressDays,
           now: now(),
         }),
-        ...findWorkflowProblems(issues, { listingComplete }),
+        ...findWorkflowProblems(issues),
       ];
       const summary = summarizeHealth(findings, { limit: args.limit ?? 10 });
       return {

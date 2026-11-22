@@ -98,6 +98,61 @@ test("an unassigned issue is not assigned", () => {
   assert.equal(issue?.assigned, false);
 });
 
+test("a document that holds an empty container holds no description", () => {
+  const emptyList = normalizeIssue({
+    key: "EX-1",
+    fields: {
+      description: {
+        type: "doc",
+        version: 1,
+        content: [{ type: "bulletList", content: [] }],
+      },
+    },
+  });
+  assert.equal(emptyList?.descriptionPresent, false);
+
+  const emptyPanel = normalizeIssue({
+    key: "EX-1",
+    fields: {
+      description: {
+        type: "doc",
+        version: 1,
+        content: [{ type: "panel", content: [] }],
+      },
+    },
+  });
+  assert.equal(emptyPanel?.descriptionPresent, false);
+});
+
+test("a document that holds a list with something in it holds a description", () => {
+  const issue = normalizeIssue({
+    key: "EX-1",
+    fields: {
+      description: {
+        type: "doc",
+        version: 1,
+        content: [
+          {
+            type: "bulletList",
+            content: [
+              {
+                type: "listItem",
+                content: [
+                  {
+                    type: "paragraph",
+                    content: [{ type: "text", text: "A step" }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+  assert.equal(issue?.descriptionPresent, true);
+});
+
 test("a description that holds only an attachment counts as a description", () => {
   const media = normalizeIssue({
     key: "EX-1",

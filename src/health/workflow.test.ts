@@ -110,29 +110,93 @@ test("an open parent with an open child is not reported", () => {
   assert.deepEqual(findings, []);
 });
 
-test("the rule about a closed parent does not fire on an incomplete listing", () => {
-  const findings = findWorkflowProblems(
-    [
-      makeIssue({
-        key: "EX-1",
-        status: "Done",
-        statusCategory: "done",
-        resolution: "Done",
-      }),
-      makeIssue({
-        key: "EX-2",
-        parentKey: "EX-1",
-        status: "To Do",
-        statusCategory: "new",
-      }),
-    ],
-    { listingComplete: false },
-  );
+test("the rule about a closed parent holds on an incomplete listing", () => {
+  // The rule needs nothing but the two issues it names, both of which were
+  // read, so a listing that may be missing other issues does not silence it.
+  const findings = findWorkflowProblems([
+    makeIssue({
+      key: "EX-1",
+      status: "Done",
+      statusCategory: "done",
+      resolution: "Done",
+    }),
+    makeIssue({
+      key: "EX-2",
+      parentKey: "EX-1",
+      status: "To Do",
+      statusCategory: "new",
+    }),
+  ]);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].issueKey, "EX-1");
+});
+
+test("an issue whose status category the site does not report proves nothing", () => {
+  const findings = findWorkflowProblems([
+    makeIssue({
+      key: "EX-1",
+      status: "Done",
+      statusCategory: undefined,
+      resolution: "Fixed",
+    }),
+  ]);
   assert.deepEqual(
     findings,
     [],
-    "a parent that was not read cannot be checked",
+    "the site did not say the status is closed",
   );
+});
+
+test("a child whose status category the site does not report is not called open", () => {
+  const findings = findWorkflowProblems([
+    makeIssue({
+      key: "EX-1",
+      status: "Done",
+      statusCategory: "done",
+      resolution: "Done",
+    }),
+    makeIssue({
+      key: "EX-2",
+      parentKey: "EX-1",
+      status: "Done",
+      statusCategory: undefined,
+    }),
+  ]);
+  assert.deepEqual(
+    findings,
+    [],
+    "the child may be finished; the site did not say",
+  );
+});
+
+test("a closed parent with several open children is reported once per child", () => {
+  const findings = findWorkflowProblems([
+    makeIssue({
+      key: "EX-1",
+      status: "Done",
+      statusCategory: "done",
+      resolution: "Done",
+    }),
+    makeIssue({ key: "EX-2", parentKey: "EX-1", statusCategory: "new" }),
+    makeIssue({ key: "EX-3", parentKey: "EX-1", statusCategory: "new" }),
+  ]);
+  assert.equal(findings.length, 2);
+  for (const finding of findings) {
+    assert.equal(finding.issueKey, "EX-1");
+  }
+});
+
+test("a closed epic with an open task is not reported: the parent relation is followed", () => {
+  const findings = findWorkflowProblems([
+    makeIssue({
+      key: "EX-1",
+      status: "Done",
+      statusCategory: "done",
+      resolution: "Done",
+    }),
+    makeIssue({ key: "EX-2", epicKey: "EX-1", statusCategory: "new" }),
+  ]);
+  assert.deepEqual(findings, []);
 });
 
 test("a closed parent whose child was not read is not reported", () => {
@@ -147,16 +211,16 @@ test("a closed parent whose child was not read is not reported", () => {
   assert.deepEqual(findings, []);
 });
 
-test("a closed issue with an empty resolution name is still reported", () => {
+test("a closed issue without a resolution is reported once", () => {
   const findings = findWorkflowProblems([
     makeIssue({
       key: "EX-1",
       status: "Closed",
       statusCategory: "done",
-      resolution: undefined,
     }),
   ]);
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].issueKey, "EX-1");
 });
 
 test("every finding names the issue it is about", () => {

@@ -15,7 +15,7 @@ The server only reads. It never changes an issue, and it never writes to Jira.
 | `jira_health_summary` | The aggregate view: the number of findings per category and severity - the hygiene findings included - the findings to look at first, and a status of `healthy` or `needs-attention`. |
 | `jira_check_installation` | The health of the installation: the deployment type and version of the instance, the health checks the instance reports about itself, whether the project can be read, and the guidance that holds for that deployment. |
 | `jira_find_issue_hygiene_problems` | The issues that are not kept well enough to be worked on: no summary, no description, work in progress without an assignee, no priority, a due date that has passed while the issue is still open, and work in progress that has not been updated for the staleness threshold. |
-| `jira_find_workflow_problems` | The issues where the workflow and the issue disagree: an issue that is closed without a resolution, an issue that is resolved while its status is still open, and a closed parent whose child is still open. |
+| `jira_find_workflow_problems` | The issues where the workflow and the issue disagree: an issue that is closed without a resolution, an issue that is resolved while its status is still open, and a closed parent whose sub-task is still open. |
 
 Every tool that reports findings takes an optional `projectKey`, an optional
 `limit`, and the thresholds that apply to it (`staleDays`, `maxDepth`,
@@ -82,12 +82,17 @@ with itself, which is what Atlassian's guidance on workflows asks for:
 - **resolved but still open** - the issue carries a resolution while its
   status is still an open one, so the two say different things about the
   work;
-- **a closed parent with an open child** - work that is still to be done
-  hides under a parent that says it is finished.
+- **a closed parent with an open sub-task** - work that is still to be done
+  hides under a parent that says it is finished. The parent relation is the
+  one that is followed; a task under a closed epic is a different relation,
+  and the hierarchy rules report that.
 
 Whether a status is closed is decided by the status category, as everywhere
-else in this server. The rule about a closed parent needs the whole project
-in the listing, so it does not fire when the listing is incomplete.
+else in this server. A site that reports no category leaves that unknown, and
+an unknown status proves nothing: a rule never reports an issue as open, as
+closed or as unfinished when the site did not say. The rule about a closed
+parent needs only the two issues it names, so it fires even when the listing
+is incomplete.
 
 ## Deployment and installation
 
