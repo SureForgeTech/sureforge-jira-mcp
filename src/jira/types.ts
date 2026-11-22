@@ -51,6 +51,18 @@ export interface Issue {
   readonly issueLinks: readonly IssueLink[];
   /** The priority name, when the issue has one. */
   readonly priority?: string;
+  /** The name of the account the issue is assigned to, when it is assigned. */
+  readonly assignee?: string;
+  /** Whether the issue carries a description with content. */
+  readonly descriptionPresent: boolean;
+  /**
+   * The category of the status, as Jira groups the statuses.
+   *
+   * It is `new` for a status like `To Do`, `indeterminate` for a status like
+   * `In Progress` and `done` for a status like `Done`. The names of the
+   * statuses themselves differ from site to site, the categories do not.
+   */
+  readonly statusCategory: StatusCategory;
   /** The due date, as an ISO 8601 date, when the issue has one. */
   readonly dueDate?: string;
 }
@@ -157,12 +169,17 @@ export interface ProjectSummary {
   readonly issueTypes: readonly string[];
 }
 
+/** The category Jira groups a status in. */
+export type StatusCategory = "new" | "indeterminate" | "done";
+
 /** The categories of finding the health rules produce. */
 export type FindingCategory =
   | "orphaned-issue"
   | "missing-release-version"
   | "stale-blocker"
-  | "broken-hierarchy";
+  | "broken-hierarchy"
+  | "issue-hygiene"
+  | "workflow-problem";
 
 /** One health finding. */
 export interface Finding {

@@ -28,6 +28,8 @@ export interface JiraConfig {
   readonly staleDays: number;
   /** A hierarchy deeper than this many levels is reported. */
   readonly maxDepth: number;
+  /** Days without an update that make work in progress stale. */
+  readonly staleInProgressDays: number;
   /** The request timeout in milliseconds. */
   readonly timeoutMs: number;
   /**
@@ -50,12 +52,14 @@ export const CONFIG_VARIABLES = [
   "JIRA_PROJECT_KEY",
   "JIRA_STALE_DAYS",
   "JIRA_MAX_DEPTH",
+  "JIRA_STALE_IN_PROGRESS_DAYS",
   "JIRA_TIMEOUT_MS",
   "JIRA_EPIC_LINK_FIELD",
 ] as const;
 
 const DEFAULT_STALE_DAYS = 14;
 const DEFAULT_MAX_DEPTH = 5;
+const DEFAULT_STALE_IN_PROGRESS_DAYS = 30;
 const DEFAULT_TIMEOUT_MS = 15000;
 
 /**
@@ -176,6 +180,12 @@ export function loadConfig(env: Environment = process.env): JiraConfig {
     projectKey: projectKey.toUpperCase(),
     staleDays: readInteger(env.JIRA_STALE_DAYS, "JIRA_STALE_DAYS", DEFAULT_STALE_DAYS, 0),
     maxDepth: readInteger(env.JIRA_MAX_DEPTH, "JIRA_MAX_DEPTH", DEFAULT_MAX_DEPTH, 1),
+    staleInProgressDays: readInteger(
+      env.JIRA_STALE_IN_PROGRESS_DAYS,
+      "JIRA_STALE_IN_PROGRESS_DAYS",
+      DEFAULT_STALE_IN_PROGRESS_DAYS,
+      1,
+    ),
     timeoutMs: readInteger(
       env.JIRA_TIMEOUT_MS,
       "JIRA_TIMEOUT_MS",
@@ -214,6 +224,7 @@ export function describeConfig(config: JiraConfig): Record<string, unknown> {
     projectKey: config.projectKey,
     staleDays: config.staleDays,
     maxDepth: config.maxDepth,
+    staleInProgressDays: config.staleInProgressDays,
     timeoutMs: config.timeoutMs,
     ...(config.epicLinkField === undefined
       ? {}

@@ -13,6 +13,7 @@ import type {
   ProjectSummary,
   ProjectVersion,
   ServerInfo,
+  StatusCategory,
 } from "./types.js";
 
 /** The REST shape of the fields this server reads. */
@@ -21,7 +22,7 @@ interface RawIssue {
   key?: unknown;
   fields?: {
     summary?: unknown;
-    status?: { name?: unknown };
+    status?: { name?: unknown; statusCategory?: { key?: unknown } | null };
     issuetype?: { name?: unknown };
     resolution?: { name?: unknown } | null;
     parent?: { key?: unknown } | null;
@@ -35,6 +36,13 @@ interface RawIssue {
     issuelinks?: unknown;
     priority?: { name?: unknown } | null;
     duedate?: unknown;
+    description?: unknown;
+    assignee?: {
+      displayName?: unknown;
+      name?: unknown;
+      key?: unknown;
+      accountId?: unknown;
+    } | null;
   };
 }
 
@@ -213,6 +221,7 @@ export function normalizeIssue(
     id: text(issue.id) ?? key,
     summary: text(fields.summary) ?? "",
     status: nameOf(fields.status) ?? "Unknown",
+    statusCategory: statusCategoryOf(fields.status),
     issueType: nameOf(fields.issuetype) ?? "Unknown",
     ...(nameOf(fields.resolution) === undefined
       ? {}
@@ -233,7 +242,72 @@ export function normalizeIssue(
     ...(text(fields.duedate) === undefined
       ? {}
       : { dueDate: text(fields.duedate) }),
+    ...(assigneeName(fields.assignee) === undefined
+      ? {}
+      : { assignee: assigneeName(fields.assignee) }),
+    descriptionPresent: hasContent(fields.description),
   };
+}
+
+/**
+ * The category Jira groups a status in.
+ *
+ * The three categories are the ones Jira uses for every status; a site that
+ * reports none of them leaves the category `indeterminate`, so a rule that
+ * needs to know whether work is open cannot be told apart from a status it
+ * does not know.
+ */
+function statusCategoryOf(status: unknown): StatusCategory {
+  const key = text(
+    status !== null && typeof status === "object"
+      ? (status as { statusCategory?: { key?: unknown } | null }).statusCategory?.key
+      : undefined,
+  );
+  if (key === "new" || key === "done") {
+    return key;
+  }
+  return "indeterminate";
+}
+
+/** The name of the account an issue is assigned to. */
+function assigneeName(assignee: unknown): string | undefined {
+  if (assignee === null || typeof assignee !== "object") {
+    return undefined;
+  }
+  const account = assignee as {
+    displayName?: unknown;
+    name?: unknown;
+    key?: unknown;
+  };
+  return (
+    text(account.displayName) ?? text(account.name) ?? text(account.key)
+  );
+}
+
+/**
+ * Whether a field carries content.
+ *
+ * A description is a document on Jira Cloud and a string on Jira Server. An
+ * empty document and an empty string are both no description.
+ */
+export function hasContent(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  if (typeof value === "object") {
+    const content = (value as { content?: unknown }).content;
+    if (Array.isArray(content)) {
+      return content.length > 0;
+    }
+    return Object.keys(value).length > 0;
+  }
+  return true;
 }
 
 /** Normalize a list of REST issues, dropping the ones without a key. */

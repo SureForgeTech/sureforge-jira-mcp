@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AnySchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
 import { redact } from "./config.js";
+import { findHygieneProblems } from "./health/hygiene.js";
 import { checkInstallation } from "./health/install.js";
 import {
   findBrokenHierarchies,
@@ -50,6 +51,8 @@ export interface HealthServerOptions {
   readonly staleDays: number;
   /** A hierarchy deeper than this many levels is reported. */
   readonly maxDepth: number;
+  /** Days without an update that make work in progress stale. */
+  readonly staleInProgressDays: number;
   /** The clock the staleness rule measures against. */
   readonly now?: () => Date;
   /** The secrets that must never appear in a message. */
@@ -64,6 +67,7 @@ export const TOOL_NAMES = [
   "jira_find_broken_hierarchies",
   "jira_health_summary",
   "jira_check_installation",
+  "jira_find_issue_hygiene_problems",
 ] as const;
 
 /** One tool name. */
@@ -317,6 +321,40 @@ export function createJiraServer(options: HealthServerOptions): McpServer {
         now: now(),
         listingComplete,
         epicLinkKnown,
+      });
+      return {
+        projectKey,
+        count: findings.length,
+        ...listingReport(issues, listing),
+        findings: ranked(findings, args.limit ?? 100),
+      };
+    },
+  );
+
+  register(
+    "jira_find_issue_hygiene_problems",
+    {
+      title: "Find the issues that are not kept well enough to be worked on",
+      description:
+        "Find the issues that are not kept well enough to be worked on: no summary, no description, work in progress without an assignee, no priority, a due date that has passed while the issue is still open, and work in progress that has not been updated for the staleness threshold.",
+      inputSchema: toolInput.extend({
+        staleInProgressDays: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe(
+            "How many days without an update make work in progress stale. Defaults to the configured threshold.",
+          ),
+      }),
+    },
+    async (args) => {
+      const projectKey = projectOf(args);
+      const { issues, listing } = await loadIssues(projectKey);
+      const findings = findHygieneProblems(issues, {
+        staleInProgressDays:
+          args.staleInProgressDays ?? options.staleInProgressDays,
+        now: now(),
       });
       return {
         projectKey,

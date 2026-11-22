@@ -37,6 +37,8 @@ test("the summary counts every category, even the empty ones", () => {
     "missing-release-version": 0,
     "stale-blocker": 1,
     "broken-hierarchy": 0,
+    "issue-hygiene": 0,
+    "workflow-problem": 0,
   });
 });
 

@@ -76,6 +76,7 @@ export async function startServer(config: JiraConfig): Promise<void> {
     projectKey: config.projectKey,
     staleDays: config.staleDays,
     maxDepth: config.maxDepth,
+    staleInProgressDays: config.staleInProgressDays,
     secrets: [config.apiToken, config.email],
   });
 

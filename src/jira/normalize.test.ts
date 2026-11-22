@@ -65,6 +65,78 @@ test("both link directions are kept", () => {
   });
 });
 
+test("the assignee is read from the account", () => {
+  const named = normalizeIssue({
+    key: "EX-1",
+    fields: { assignee: { displayName: "A Person", accountId: "abc" } },
+  });
+  assert.equal(named?.assignee, "A Person");
+
+  const legacy = normalizeIssue({
+    key: "EX-1",
+    fields: { assignee: { name: "aperson", key: "aperson" } },
+  });
+  assert.equal(legacy?.assignee, "aperson");
+
+  const unassigned = normalizeIssue({
+    key: "EX-1",
+    fields: { assignee: null },
+  });
+  assert.equal(unassigned?.assignee, undefined);
+});
+
+test("the description is read as present or absent", () => {
+  const withText = normalizeIssue({
+    key: "EX-1",
+    fields: { description: "What has to happen." },
+  });
+  assert.equal(withText?.descriptionPresent, true);
+
+  const emptyText = normalizeIssue({
+    key: "EX-1",
+    fields: { description: "   " },
+  });
+  assert.equal(emptyText?.descriptionPresent, false);
+
+  const emptyDocument = normalizeIssue({
+    key: "EX-1",
+    fields: { description: { type: "doc", version: 1, content: [] } },
+  });
+  assert.equal(emptyDocument?.descriptionPresent, false);
+
+  const document = normalizeIssue({
+    key: "EX-1",
+    fields: { description: { type: "doc", version: 1, content: [{ type: "p" }] } },
+  });
+  assert.equal(document?.descriptionPresent, true);
+
+  const none = normalizeIssue({ key: "EX-1", fields: {} });
+  assert.equal(none?.descriptionPresent, false);
+});
+
+test("the status category is read from the status", () => {
+  const done = normalizeIssue({
+    key: "EX-1",
+    fields: { status: { name: "Done", statusCategory: { key: "done" } } },
+  });
+  assert.equal(done?.statusCategory, "done");
+
+  const progress = normalizeIssue({
+    key: "EX-1",
+    fields: { status: { name: "In Progress", statusCategory: { key: "indeterminate" } } },
+  });
+  assert.equal(progress?.statusCategory, "indeterminate");
+
+  const todo = normalizeIssue({
+    key: "EX-1",
+    fields: { status: { name: "To Do", statusCategory: { key: "new" } } },
+  });
+  assert.equal(todo?.statusCategory, "new");
+
+  const unknown = normalizeIssue({ key: "EX-1", fields: { status: { name: "Odd" } } });
+  assert.equal(unknown?.statusCategory, "indeterminate");
+});
+
 test("an issue without a key is dropped", () => {
   assert.equal(normalizeIssue({ id: "1", fields: {} }), undefined);
   assert.equal(normalizeIssue({ key: "", fields: {} }), undefined);

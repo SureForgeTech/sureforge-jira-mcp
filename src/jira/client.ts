@@ -76,6 +76,8 @@ const BASE_ISSUE_FIELDS = [
   "issuelinks",
   "priority",
   "duedate",
+  "description",
+  "assignee",
   "project",
 ];
 

@@ -61,6 +61,19 @@ test("every missing variable is named in the error", () => {
   }
 });
 
+test("the staleness of work in progress is read and bounded", () => {
+  assert.equal(
+    loadConfig({ ...completeEnv, JIRA_STALE_IN_PROGRESS_DAYS: "10" })
+      .staleInProgressDays,
+    10,
+  );
+  assert.equal(loadConfig(completeEnv).staleInProgressDays, 30);
+  assert.throws(
+    () => loadConfig({ ...completeEnv, JIRA_STALE_IN_PROGRESS_DAYS: "0" }),
+    ConfigError,
+  );
+});
+
 test("the Epic Link field id is read and must look like a field id", () => {
   assert.equal(
     loadConfig({ ...completeEnv, JIRA_EPIC_LINK_FIELD: "customfield_10100" })

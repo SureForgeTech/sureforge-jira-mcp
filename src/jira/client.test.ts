@@ -685,6 +685,16 @@ test("a body that is not JSON is reported as a Jira error", async () => {
   );
 });
 
+test("the description and the assignee are asked for", async () => {
+  const { fetchImpl, requests } = fakeFetch([
+    jsonResponse({ issues: [], isLast: true }),
+  ]);
+  await client(fetchImpl).listIssues("EX");
+  const fields = requests[0].url.searchParams.get("fields") ?? "";
+  assert.ok(fields.includes("description"), "the description is asked for");
+  assert.ok(fields.includes("assignee"), "the assignee is asked for");
+});
+
 test("the server info is read from the instance", async () => {
   const { fetchImpl, requests } = fakeFetch([
     jsonResponse({

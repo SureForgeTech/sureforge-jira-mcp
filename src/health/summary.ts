@@ -75,6 +75,8 @@ export function summarizeHealth(
     "missing-release-version": 0,
     "stale-blocker": 0,
     "broken-hierarchy": 0,
+    "issue-hygiene": 0,
+    "workflow-problem": 0,
   };
   const bySeverity = { high: 0, medium: 0, low: 0 };
 

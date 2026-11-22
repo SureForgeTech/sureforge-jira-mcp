@@ -69,6 +69,7 @@ async function connect(source: JiraReader): Promise<{
     projectKey: "EXAMPLE",
     staleDays: 14,
     maxDepth: 5,
+    staleInProgressDays: 30,
     now: () => NOW,
     secrets: ["example-token-value"],
   });
@@ -235,6 +236,8 @@ test("the summary counts every category", async () => {
       "missing-release-version": 2,
       "stale-blocker": 1,
       "broken-hierarchy": 1,
+      "issue-hygiene": 0,
+      "workflow-problem": 0,
     });
     assert.equal(body.total, 6);
   } finally {
@@ -376,6 +379,47 @@ test("a truncated listing softens the orphan finding", async () => {
     }>;
     assert.equal(findings[0].severity, "low");
     assert.match(findings[0].detail, /no issue in the listing of 1 issues/);
+  } finally {
+    await close();
+  }
+});
+
+test("the hygiene tool reports the issues that are not kept well enough", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          makeIssue({
+            key: "EX-1",
+            summary: "",
+            descriptionPresent: false,
+            priority: "Medium",
+            status: "In Progress",
+            statusCategory: "indeterminate",
+          }),
+        ],
+        truncated: false,
+        dropped: 0,
+        examined: 1,
+        epicLinkKnown: true,
+      }),
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_issue_hygiene_problems",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(body.projectKey, "EXAMPLE");
+    const findings = body.findings as Array<{ detail: string }>;
+    assert.ok(findings.some((finding) => finding.detail.includes("no summary")));
+    assert.ok(
+      findings.some((finding) => finding.detail.includes("no description")),
+    );
+    assert.ok(
+      findings.some((finding) => finding.detail.includes("no assignee")),
+    );
   } finally {
     await close();
   }

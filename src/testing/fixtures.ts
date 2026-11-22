@@ -24,6 +24,8 @@ export function makeIssue(
     updated: "2026-01-01T00:00:00.000Z",
     projectKey: "EXAMPLE",
     issueLinks: [],
+    descriptionPresent: true,
+    statusCategory: "new" as const,
     ...overrides,
   };
 }
