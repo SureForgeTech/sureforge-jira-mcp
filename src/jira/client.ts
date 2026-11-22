@@ -6,6 +6,8 @@
  * drive the real request-building and response-handling code against a local
  * mock instead of a live Jira.
  */
+import { stripTrailingSlashes } from "../config.js";
+
 import {
   hasUnusableEpicValue,
   normalizeIssues,
@@ -164,7 +166,7 @@ const SEARCH_ENDPOINTS = [
  */
 export function normalizeBaseUrl(baseUrl: string): string {
   let url = baseUrl.trim();
-  url = url.replace(/\/+$/, "");
+  url = stripTrailingSlashes(url);
   url = url.replace(/\/rest\/api\/3$/i, "");
   return url;
 }

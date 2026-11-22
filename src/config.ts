@@ -6,6 +6,13 @@
  * message that could carry one goes through `redact`.
  */
 
+/** Remove trailing path separators in one backwards scan. */
+export function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") end--;
+  return value.slice(0, end);
+}
+
 /** A configuration value that cannot be used. */
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -91,7 +98,7 @@ export function assertUsableBaseUrl(baseUrl: string): string {
     );
   }
 
-  return baseUrl.replace(/\/+$/, "");
+  return stripTrailingSlashes(baseUrl);
 }
 function readInteger(
   raw: string | undefined,
