@@ -241,8 +241,11 @@ test("the summary counts every category", async () => {
       // is free of them.
       "issue-hygiene": 6,
       "workflow-problem": 0,
+      // The fixture releases 1.0.0 while EX-4 in it is still open, and it
+      // holds the empty version 2.0.0.
+      "release-problem": 2,
     });
-    assert.equal(body.total, 12);
+    assert.equal(body.total, 14);
   } finally {
     await close();
   }
@@ -280,6 +283,165 @@ test("the workflow tool reports a closed issue with open work on a partial listi
     const findings = body.findings as Array<{ issueKey: string }>;
     assert.equal(findings.length, 1);
     assert.equal(findings[0].issueKey, "EX-1");
+  } finally {
+    await close();
+  }
+});
+
+test("the release tool reports the releases that do not say what they should say", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          makeIssue({
+            key: "EX-1",
+            fixVersions: ["1.0.0"],
+            statusCategory: "new",
+          }),
+        ],
+        truncated: false,
+        dropped: 0,
+        examined: 1,
+        epicLinkKnown: true,
+      }),
+      listVersions: async () => [
+        {
+          name: "1.0.0",
+          released: true,
+          releaseDate: "2026-02-01",
+          archived: false,
+        },
+      ],
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_release_problems",
+      arguments: {},
+    });
+    const body = payload(result);
+    const findings = body.findings as Array<{
+      issueKey: string;
+      category: string;
+      severity: string;
+    }>;
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].issueKey, "1.0.0");
+    assert.equal(findings[0].category, "release-problem");
+    assert.equal(findings[0].severity, "high");
+  } finally {
+    await close();
+  }
+});
+
+test("a truncated listing softens the release finding that holds nothing", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [],
+        truncated: true,
+        dropped: 1500,
+        examined: 0,
+        epicLinkKnown: true,
+      }),
+      listVersions: async () => [
+        {
+          name: "2.0.0",
+          released: false,
+          archived: false,
+        },
+      ],
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_find_release_problems",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(body.truncated, true);
+    const findings = body.findings as Array<{ detail: string }>;
+    assert.equal(findings.length, 1);
+    assert.match(
+      findings[0].detail,
+      /does not cover the whole project/,
+      "an incomplete listing cannot prove that the version holds nothing",
+    );
+  } finally {
+    await close();
+  }
+});
+
+test("a truncated listing softens the release finding in the summary too", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [],
+        truncated: true,
+        dropped: 1500,
+        examined: 0,
+        epicLinkKnown: true,
+      }),
+      listVersions: async () => [
+        { name: "2.0.0", released: false, archived: false },
+      ],
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_health_summary",
+      arguments: {},
+    });
+    const body = payload(result);
+    const findings = (body.topFindings as Array<{ detail: string }>) ?? [];
+    assert.ok(
+      findings.some((finding) =>
+        finding.detail.includes("does not cover the whole project"),
+      ),
+      "the summary must not claim that a version holds nothing either",
+    );
+  } finally {
+    await close();
+  }
+});
+
+test("the summary counts the release findings", async () => {
+  const { client, close } = await connect(
+    reader({
+      listIssues: async () => ({
+        issues: [
+          makeIssue({
+            key: "EX-1",
+            fixVersions: ["1.0.0"],
+            statusCategory: "new",
+          }),
+        ],
+        truncated: false,
+        dropped: 0,
+        examined: 1,
+        epicLinkKnown: true,
+      }),
+      listVersions: async () => [
+        {
+          name: "1.0.0",
+          released: true,
+          releaseDate: "2026-02-01",
+          archived: false,
+        },
+      ],
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "jira_health_summary",
+      arguments: {},
+    });
+    const body = payload(result);
+    assert.equal(
+      (body.byCategory as Record<string, number>)["release-problem"],
+      1,
+      "an agent that reads only the summary must see the release findings",
+    );
   } finally {
     await close();
   }

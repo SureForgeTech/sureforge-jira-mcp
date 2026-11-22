@@ -1,7 +1,7 @@
 {
   "name": "sureforge-jira-mcp",
   "version": "0.1.0",
-  "description": "MCP server for Jira health: finds orphaned issues, missing release versions, stale blockers, broken hierarchies, the issues that are not kept well enough to be worked on and the issues where the workflow and the issue disagree, and reports the health of the installation.",
+  "description": "MCP server for Jira health: finds orphaned issues, missing release versions, stale blockers, broken hierarchies, the issues that are not kept well enough to be worked on, the issues where the workflow and the issue disagree and the releases that do not say what they should say, and reports the health of the installation.",
   "license": "Apache-2.0",
   "author": "SureForgeTech",
   "repository": {

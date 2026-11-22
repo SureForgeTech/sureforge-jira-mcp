@@ -1,6 +1,6 @@
 # sureforge-jira-mcp
 
-MCP server for Jira health: finds orphaned issues, missing release versions, stale blockers, broken hierarchies, the issues that are not kept well enough to be worked on and the issues where the workflow and the issue disagree, and reports the health of the installation.
+MCP server for Jira health: finds orphaned issues, missing release versions, stale blockers, broken hierarchies, the issues that are not kept well enough to be worked on, the issues where the workflow and the issue disagree and the releases that do not say what they should say, and reports the health of the installation.
 
 The server only reads. It never changes an issue, and it never writes to Jira.
 
@@ -12,10 +12,11 @@ The server only reads. It never changes an issue, and it never writes to Jira.
 | `jira_find_missing_release_versions` | Issues whose release version is missing or wrong: an issue names a version the project does not have, or an issue ships in a release while its parent carries no version. |
 | `jira_find_stale_blockers` | Open issues that block other issues and have not been updated for the staleness threshold or longer. A blocker of work that already ships is reported as high severity. |
 | `jira_find_broken_hierarchies` | Broken issue hierarchies: a parent or epic that does not exist, a parent chain that loops, and a hierarchy deeper than the depth limit. |
-| `jira_health_summary` | The aggregate view: the number of findings per category and severity - the hygiene findings included - the findings to look at first, and a status of `healthy` or `needs-attention`. |
+| `jira_health_summary` | The aggregate view: the number of findings per category and severity - the hygiene, workflow and release findings included - the findings to look at first, and a status of `healthy` or `needs-attention`. |
 | `jira_check_installation` | The health of the installation: the deployment type and version of the instance, the health checks the instance reports about itself, whether the project can be read, and the guidance that holds for that deployment. |
 | `jira_find_issue_hygiene_problems` | The issues that are not kept well enough to be worked on: no summary, no description, work in progress without an assignee, no priority, a due date that has passed while the issue is still open, and work in progress that has not been updated for the staleness threshold. |
 | `jira_find_workflow_problems` | The issues where the workflow and the issue disagree: an issue that is closed without a resolution, an issue that is resolved while its status is still open, and a closed issue with a child that is not finished. |
+| `jira_find_release_problems` | The releases that do not say what they should say: a version that was released and still holds open issues, a version that was released without a release date, and a version that holds no issues. The key of such a finding is the version. |
 
 Every tool that reports findings takes an optional `projectKey`, an optional
 `limit`, and the thresholds that apply to it (`staleDays`, `maxDepth`,
@@ -94,6 +95,29 @@ an unknown status proves nothing: a rule never reports an issue as open, as
 closed or as unfinished when the site did not say. The rule about a closed
 parent needs only the two issues it names, so it fires even when the listing
 is incomplete.
+
+## Release health
+
+`jira_find_release_problems` looks at the releases of the project rather
+than at the issues:
+
+- **a version that was released and still holds open issues** - the release
+  notes and the burndown do not describe what shipped;
+- **a version that was released without a release date** - nothing says when
+  it shipped;
+- **a version that holds no issues at all** - it will ship nothing.
+
+An issue counts as open when it carries no resolution and its status is not in
+the category Jira groups the finished statuses in. A status the site does not
+report is not work in progress either, so such an issue holds no release
+open. A version that was archived is not reported for holding nothing, and on
+an incomplete listing that finding says so instead of claiming the version is
+empty.
+
+A version counts as released when the site says it is; the rules that decide
+whether blocked work ships also count a version whose release date has passed.
+Only the issues of this project are read, so a version that is shared with
+another project may hold issues this listing does not show.
 
 ## Deployment and installation
 

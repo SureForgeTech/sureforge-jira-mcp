@@ -37,6 +37,7 @@ const CATEGORIES: readonly FindingCategory[] = [
   "broken-hierarchy",
   "issue-hygiene",
   "workflow-problem",
+  "release-problem",
 ];
 
 /**
@@ -79,6 +80,7 @@ export function summarizeHealth(
     "broken-hierarchy": 0,
     "issue-hygiene": 0,
     "workflow-problem": 0,
+    "release-problem": 0,
   };
   const bySeverity = { high: 0, medium: 0, low: 0 };
 

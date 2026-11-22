@@ -195,15 +195,24 @@ export type FindingCategory =
   | "stale-blocker"
   | "broken-hierarchy"
   | "issue-hygiene"
-  | "workflow-problem";
+  | "workflow-problem"
+  | "release-problem";
 
 /** One health finding. */
 export interface Finding {
   /** The category the finding belongs to. */
   readonly category: FindingCategory;
-  /** The issue the finding is about. */
+  /**
+   * The issue the finding is about.
+   *
+   * For a finding about a release it is the name of the version, because
+   * that is what the finding is about.
+   */
   readonly issueKey: string;
-  /** The issue summary, so a reader does not need to look the issue up. */
+  /**
+   * A one-line description of the subject, so a reader does not need to look
+   * it up.
+   */
   readonly summary: string;
   /** A one-line description of what is wrong. */
   readonly detail: string;
