@@ -57,7 +57,10 @@ enough to be worked on, the defects Atlassian's own Jira guidance calls out:
 
 Whether work is in progress is decided by the status *category* Jira groups
 the status in (`new`, `indeterminate`, `done`), not by the name of the status,
-because the names differ from site to site. A site that reports no category
+because the names differ from site to site. Only `indeterminate` - the
+category of the statuses like `In Progress` - counts as work in progress: a
+`To Do` issue without an assignee is not reported, because nobody is working
+on it yet. A site that reports no category
 at all leaves that unknown, and an unknown category is not work in progress.
 A due date without a time is read as the end of that day in UTC.
 

@@ -224,7 +224,7 @@ export function normalizeIssue(
     status: nameOf(fields.status) ?? "Unknown",
     ...(statusCategory === undefined ? {} : { statusCategory }),
     issueType: nameOf(fields.issuetype) ?? "Unknown",
-    subTask: fields.issuetype?.subtask === true,
+    subTask: isTrue(fields.issuetype?.subtask),
     ...(nameOf(fields.resolution) === undefined
       ? {}
       : { resolution: nameOf(fields.resolution) }),
@@ -279,6 +279,25 @@ function statusCategoryOf(status: unknown): StatusCategory | undefined {
  */
 function assigneeOf(assignee: unknown): boolean {
   return assignee !== null && typeof assignee === "object";
+}
+
+/**
+ * Whether a value says yes.
+ *
+ * The REST API sends a boolean here, but a site that sends the string
+ * "true" or the number 1 means the same thing.
+ */
+function isTrue(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value === 1;
+  }
+  if (typeof value === "string") {
+    return value.trim().toLowerCase() === "true";
+  }
+  return false;
 }
 
 /**

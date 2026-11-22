@@ -68,7 +68,7 @@ function isOverdue(dueDate: string, now: Date): boolean {
     return false;
   }
   const endOfDay = new Date(parsed);
-  if (dueDate.length <= 10) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dueDate.trim())) {
     endOfDay.setUTCHours(23, 59, 59, 999);
   }
   return endOfDay.getTime() < now.getTime();
