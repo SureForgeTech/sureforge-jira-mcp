@@ -176,6 +176,7 @@ test("the built server answers the health tools over stdio", async (t) => {
       "jira_find_missing_release_versions",
       "jira_find_orphaned_issues",
       "jira_find_stale_blockers",
+      "jira_find_workflow_problems",
       "jira_health_summary",
     ],
   );
@@ -188,6 +189,12 @@ test("the built server answers the health tools over stdio", async (t) => {
   );
   assert.equal(hygiene.projectKey, "EXAMPLE");
   assert.ok(Array.isArray(hygiene.findings));
+
+  const workflow = payload(
+    await client.callTool({ name: "jira_find_workflow_problems", arguments: {} }),
+  );
+  assert.equal(workflow.projectKey, "EXAMPLE");
+  assert.ok(Array.isArray(workflow.findings));
 
   const installation = payload(
     await client.callTool({ name: "jira_check_installation", arguments: {} }),

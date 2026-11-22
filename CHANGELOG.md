@@ -10,11 +10,12 @@ project uses semantic versioning.
 
 - Project scaffold: the TypeScript build, the declared `npm run check`
   validation command and the server entry point.
-- The MCP server speaks over its standard input and output and publishes seven
+- The MCP server speaks over its standard input and output and publishes eight
   read-only tools: `jira_find_orphaned_issues`,
   `jira_find_missing_release_versions`, `jira_find_stale_blockers`,
   `jira_find_broken_hierarchies`, `jira_health_summary`,
-  `jira_check_installation` and `jira_find_issue_hygiene_problems`.
+  `jira_check_installation`, `jira_find_issue_hygiene_problems` and
+  `jira_find_workflow_problems`.
 - The Jira REST client reads a project and its release versions, falls back to
   the earlier search endpoint when a site does not know the current one, and
   never carries a credential into a message.
@@ -30,6 +31,10 @@ project uses semantic versioning.
   default. A site that refuses the field is read without it, and the result
   says that the epic relation is unknown.
 
+- `jira_find_workflow_problems` reports the issues where the workflow and the
+  issue disagree: an issue that is closed without a resolution, an issue that
+  is resolved while its status is still open, and a closed parent whose child
+  is still open.
 - `jira_find_issue_hygiene_problems` reports the issues that are not kept well
   enough to be worked on: no summary, no description, work in progress without
   an assignee, no priority, a due date that has passed while the issue is still

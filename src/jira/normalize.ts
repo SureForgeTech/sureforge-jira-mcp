@@ -320,6 +320,20 @@ export function hasContent(value: unknown): boolean {
   }
   if (typeof value === "object") {
     const node = value as { type?: unknown; content?: unknown; text?: unknown };
+    const content = node.content;
+    if (Array.isArray(content)) {
+      if (content.some((entry) => hasContent(entry))) {
+        return true;
+      }
+      // A container node that holds nothing holds nothing of its own.
+      const type = text(node.type);
+      if (type === undefined || type === "paragraph" || type === "text" || type === "doc") {
+        return false;
+      }
+      // A node that is not a paragraph and not empty holds something of its
+      // own: an attachment, a table, a rule.
+      return true;
+    }
     const type = text(node.type);
     if (
       type !== undefined &&
@@ -327,13 +341,7 @@ export function hasContent(value: unknown): boolean {
       type !== "text" &&
       type !== "doc"
     ) {
-      // A node that is not a paragraph holds something of its own: an
-      // attachment, a table, a rule.
       return true;
-    }
-    const content = node.content;
-    if (Array.isArray(content)) {
-      return content.some((entry) => hasContent(entry));
     }
     const nodeText = node.text;
     if (typeof nodeText === "string") {
